@@ -1,0 +1,191 @@
+﻿//Kernels with Definitions to allow different compilation per Kernel
+#pragma kernel Setup SETUP_ONLY
+#pragma kernel SlaveUpdate SLAVE_SIM SLAVE_OR_MASTER
+#pragma kernel MasterUpdate MASTER_SIM SLAVE_OR_MASTER
+
+// Macro for HLSL Tools only for Visual Studio
+// Prevents graying out unknown preprocessor macros
+#if defined(__INTELLISENSE__)
+  #define SETUP_ONLY
+  //#define SLAVE_SIM 
+  #define MASTER_SIM
+  #define SLAVE_OR_MASTER
+#endif
+
+#define SLAVE_SWARM_SIZE 64
+#define MASTER_SWARM_SIZE 64
+
+#include "Definitions/SharedInputs.hlsl"
+#include "Definitions/Structs.hlsl"
+#include "Utils/Random.hlsl"
+
+RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
+RWStructuredBuffer<SwarmData> SwarmBuffer;
+
+#ifdef SLAVE_SIM
+cbuffer SlaveSwarmUniforms
+{
+  float c1; // acceleration constant for individual interaction
+  float c2; // acceleration constant for social interaction
+  float alpha; // disturbance constant for boundary conditions
+  uint n; // Number of particle replications
+  float3 target; // Target Position
+  float inertiaWeight; // linearly descreases every iteration
+}
+#endif
+#ifdef MASTER_SIM
+cbuffer MasterSwarmUniforms
+{
+  float c1; // acceleration constant for individual interaction
+  float c2; // acceleration constant for social interaction
+  float c3; // acceleration constant for interaction with slaves
+  float alpha; // disturbance constant for boundary conditions
+  uint n; // Number of particle replications
+  float3 target; // Target Position
+  float inertiaWeight; // linearly descreases every iteration
+  float3 slaveGlobalBest; // Best global value obtained by the slave swarms
+  uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer 
+  uint swarmParticleBufferMasterOffset; //Index to first Master Swarm Particle in SwarmParticleBuffer
+}
+#endif
+
+#ifdef SLAVE_OR_MASTER
+
+// Shared Memory
+groupshared uint4 globalBestFitness_uint;
+
+void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint group_index)
+{
+  SwarmData swarm = SwarmBuffer[swarmBufferIndex];
+  SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
+#ifdef SLAVE_SIM
+  float2 rand = hash21(time.y);
+  // Update velocity
+  particle.velocity = inertiaWeight * particle.velocity 
+    + rand.x * c1 * (particle.localBest - particle.position)
+    + rand.y * c2 * (swarm.globalBest - particle.position);
+#endif
+#ifdef MASTER_SIM
+  float3 rand = hash31(time.y);
+  // Update velocity
+  particle.velocity = inertiaWeight * particle.velocity 
+    + rand.x * c1 * (particle.localBest - particle.position)
+    + rand.y * c2 * (swarm.globalBest - particle.position)
+    + rand.z * c3 * (slaveGlobalBest - particle.position);
+#endif
+  
+  // Update position
+  particle.position += particle.velocity;
+
+  // Apply boundary corrections
+  // TODO: Make this more performant
+  if (any(particle.position < worldmin))
+  {
+    particle.velocity = -particle.velocity * rand.x;
+    particle.position = max(particle.position, worldmin) + rand.y * alpha;
+  }
+  if (any(particle.position > worldmax))
+  {
+    particle.velocity = -particle.velocity * rand.x;
+    particle.position = min(particle.position, worldmax) - rand.y * alpha;
+  }
+  
+  // Update fitness
+  // Fitness is evaluated in terms of quadratic distance to target.
+  float3 direction = particle.position - target;
+  float currentFitness = dot(direction, direction);
+  
+  // Save localBest and fitness, if it's a new optimal local solution
+  particle.localBest = (currentFitness < particle.fitness) ? particle.position : particle.localBest;
+  particle.fitness = min(particle.fitness, currentFitness);
+  
+  globalBestFitness_uint = uint4(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF); // Set each globalBest component to uint max
+  
+  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  
+  //Intpret localBest and fitness as uint, because InterlockedMin only works on ints.
+  uint4 localBestFitness_uint = uint4(asuint(particle.localBest.x), asuint(particle.localBest.y), asuint(particle.localBest.z), asuint(particle.fitness));
+  
+  // TODO: Either disallow negative world min/max or take care of negative value uint interpretation
+  
+  InterlockedMin(globalBestFitness_uint.x, localBestFitness_uint.x);
+  InterlockedMin(globalBestFitness_uint.y, localBestFitness_uint.y);
+  InterlockedMin(globalBestFitness_uint.z, localBestFitness_uint.z);
+  InterlockedMin(globalBestFitness_uint.w, localBestFitness_uint.w);
+  
+  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  
+  swarm.fitness = asfloat(globalBestFitness_uint.w);
+  swarm.globalBest = float3(asfloat(globalBestFitness_uint.x), asfloat(globalBestFitness_uint.y), asfloat(globalBestFitness_uint.z));
+  
+  //TODO: REMOVE DEBUG ONLY
+  //particle.position = worldmin;
+  //float3(time.y, 1.5, 2.0);
+  //particle.velocity = float3(time.x, 0, 0);
+  
+  // Write results
+  SwarmParticleBuffer[particleBufferIndex] = particle;
+  
+  // Write best group result only once per group.
+  if (group_index == 0)
+  {
+    SwarmBuffer[swarmBufferIndex] = swarm;
+  }
+  
+  /*
+  TODO: Add Evolutionary Part
+  */
+}
+#endif
+
+#ifdef SLAVE_SIM
+[numthreads(SLAVE_SWARM_SIZE, 1, 1)]
+void SlaveUpdate(uint3 group : SV_GroupID, uint group_index : SV_GroupIndex, uint3 id : SV_DispatchThreadID)
+{
+  Simulate(group.x, id.x, group_index);
+}
+#endif
+
+#ifdef MASTER_SIM
+[numthreads(MASTER_SWARM_SIZE, 1, 1)]
+void MasterUpdate(uint3 group : SV_GroupID, uint group_index : SV_GroupIndex, uint3 id : SV_DispatchThreadID)
+{
+  Simulate(swarmBufferMasterIndex, swarmParticleBufferMasterOffset + id.x, group_index);
+}
+#endif
+
+#ifdef SETUP_ONLY
+float3 startPosition;
+float3 target;
+float positionVariance;
+float velocityVariance;
+
+[numthreads(SLAVE_SWARM_SIZE, 1, 1)]
+void Setup(uint3 group : SV_GroupID, uint group_index : SV_GroupIndex, uint3 id : SV_DispatchThreadID)
+{
+  float3 rand = hash31(id.x * time.y);
+  //Initialize the population
+  SwarmParticleData particle;
+  particle.position = startPosition.xyz + rand * positionVariance;
+  particle.velocity = rand * velocityVariance;
+  SwarmData swarm;
+  
+  //Init fitness
+  particle.localBest = particle.position - target;
+  particle.fitness = dot(particle.localBest, particle.localBest);
+
+  // Write results
+  SwarmParticleBuffer[id.x] = particle;
+  
+  // Write best group result only once per group.
+  if (group_index == 0)
+  {
+    //TODO: For now just set swarms values as the first of group
+    
+    swarm.fitness = particle.fitness;
+    swarm.globalBest = particle.localBest;
+    
+    SwarmBuffer[group.x] = swarm;
+  }
+}
+#endif
