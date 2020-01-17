@@ -109,13 +109,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint group_index)
   swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
-  
-  //TODO: REMOVE DEBUG ONLY
-  //particle.position = float3(rand.x, rand.y, rand.y);
-  //particle.position = target;
-  //float3(time.y, 1.5, 2.0);
-  //particle.velocity = float3(time.x, 0, 0);
-  
+
   // Write results
   SwarmParticleBuffer[particleBufferIndex] = particle;
   

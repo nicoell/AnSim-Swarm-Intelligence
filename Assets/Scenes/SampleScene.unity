@@ -288,7 +288,7 @@ Transform:
   m_GameObject: {fileID: 852724877}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 10, y: 10, z: 10}
+  m_LocalScale: {x: 100, y: 100, z: 100}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 2
@@ -421,11 +421,11 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1648731899}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 8.7, y: 5.86, z: 4.61}
+  m_LocalPosition: {x: 80, y: 80, z: 80}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
-  m_Father: {fileID: 1932528257}
-  m_RootOrder: 0
+  m_Father: {fileID: 0}
+  m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1932528255
 GameObject:
@@ -459,19 +459,20 @@ MonoBehaviour:
   swarmSimManager: {fileID: 852724878}
   targetTransform: {fileID: 1648731900}
   maxSlaveSwarmCount: 32
-  setupPositionVariance: 0.5
-  setupVelocityVariance: 0.2
+  setupPositionVariance: 0.1
+  setupVelocityVariance: 0.1
   activeSlaveSwarmCount: 32
   replicatesPerParticle: 5
-  boundaryDisturbanceConstant: 0.22
+  boundaryDisturbanceConstant: 0.001
   globalBestDisturbanceConstant: 0.005
   mutationStrategyParameter: 0.22
-  individualAccelerationConstant: 2.05
-  socialAccelerationConstant: 2.05
-  masterAccelerationConstant: 2.02
+  individualAccelerationConstant: 0.1
+  socialAccelerationConstant: 0.1
+  masterAccelerationConstant: 0.1
+  inertiaWeight: 0.02
   particleMesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
   subMeshIndex: 0
-  particleTint: {r: 0.4412804, g: 0.9150943, b: 0.41006586, a: 0}
+  particleTint: {r: 0.4412804, g: 0.9150943, b: 0.41006586, a: 1}
 --- !u!4 &1932528257
 Transform:
   m_ObjectHideFlags: 0
@@ -480,10 +481,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1932528255}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 3.77, y: 8.42, z: -0.2}
+  m_LocalPosition: {x: 20, y: 20, z: 20}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_Children:
-  - {fileID: 1648731900}
+  m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

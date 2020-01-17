@@ -47,7 +47,7 @@ namespace AnSim.Runtime
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
 
-      _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale - transform.position);
+      _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale);
 
       Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
 
@@ -61,11 +61,14 @@ namespace AnSim.Runtime
     private void Update()
     {
       #region Update all Swarms
+
+      _simulationBounds.center = transform.position + 0.5f * transform.localScale;
+      _simulationBounds.size = transform.localScale;
+
       //Update global Swarm Simulation Uniforms
       _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
       _swarmSimulationUniforms[0].timeSinceStart = Time.time;
-
-      _swarmSimulationUniforms[0].worldmax = transform.localScale;
+      _swarmSimulationUniforms[0].worldmax = transform.position + transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
 
@@ -125,6 +128,11 @@ namespace AnSim.Runtime
       }
 
       return 0;
+    }
+
+    private void OnDrawGizmos()
+    {
+      Gizmos.DrawWireCube(_simulationBounds.center, _simulationBounds.size);
     }
   }
 }

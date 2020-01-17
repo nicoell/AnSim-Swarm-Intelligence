@@ -39,6 +39,8 @@ namespace AnSim.Runtime
     public float socialAccelerationConstant = 2.05f; //c2
     [Range(0.1f, 9.9f)]
     public float masterAccelerationConstant = 2.02f; //c3
+    [Range(0.001f, 1.0f)]
+    public float inertiaWeight = 0.02f; //Particle momentum, weighs contribution of previous velocity
 
     [Header("Render Settings")]
     public Mesh particleMesh;
@@ -145,7 +147,7 @@ namespace AnSim.Runtime
       _slaveSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
       _slaveSwarmUniforms[0].c1 = individualAccelerationConstant;
       _slaveSwarmUniforms[0].c2 = socialAccelerationConstant;
-      _slaveSwarmUniforms[0].inertiaWeight = 1.0f; //TODO
+      _slaveSwarmUniforms[0].inertiaWeight = inertiaWeight;
       _slaveSwarmUniforms[0].n = replicatesPerParticle;
       _slaveSwarmUniforms[0].target = targetTransform.position;
       //Update Uniform Buffer
@@ -166,7 +168,7 @@ namespace AnSim.Runtime
       _masterSwarmUniforms[0].c1 = individualAccelerationConstant;
       _masterSwarmUniforms[0].c2 = socialAccelerationConstant;
       _masterSwarmUniforms[0].c3 = masterAccelerationConstant;
-      _masterSwarmUniforms[0].inertiaWeight = 1.0f; //TODO
+      _masterSwarmUniforms[0].inertiaWeight = inertiaWeight;
       _masterSwarmUniforms[0].n = replicatesPerParticle;
       _masterSwarmUniforms[0].target = targetTransform.position;
       _masterSwarmUniforms[0].slaveGlobalBest = targetTransform.position; //TODO: Use actual best result of best SlaveSwarm
@@ -211,7 +213,11 @@ namespace AnSim.Runtime
     private int GetCurrentSlaveSwarmCount() => Mathf.Min(maxSlaveSwarmCount, activeSlaveSwarmCount);
     private int GetMaxSwarmParticleCount() => GetMaxSlaveSwarmParticleCount() + _masterSwarmSize;
     private int GetMaxSlaveSwarmParticleCount() => maxSlaveSwarmCount * _slaveSwarmSize;
-    
 
+    private void OnDrawGizmos()
+    {
+      Gizmos.color = particleTint;
+      Gizmos.DrawSphere(targetTransform.position, 1f);
+    }
   }
 }
