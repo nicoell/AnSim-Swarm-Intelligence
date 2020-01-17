@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using AnSim;
 using UnityEngine;
 
@@ -21,15 +22,18 @@ namespace AnSim.Runtime
     private int _swarmSimulationUniformBufferNameId;
     private ComputeBuffer _swarmSimulationUniformBuffer;
     private SwarmSimulationUniforms[] _swarmSimulationUniforms;
+    private int _swarmSimulationUniformsSize;
 
     private void Awake()
     {
       _swarms = new List<Swarm>(); //Init Swarm list
 
       // Init SwarmSimulationUniform Buffer and data
+      _swarmSimulationUniformsSize =
+        Marshal.SizeOf(typeof(SwarmSimulationUniforms));
       _swarmSimulationUniformBufferNameId =
         Shader.PropertyToID("SwarmSimulationUniforms");
-      _swarmSimulationUniformBuffer = new ComputeBuffer(1, SwarmSimulationUniforms.GetSize(), ComputeBufferType.Constant);
+      _swarmSimulationUniformBuffer = new ComputeBuffer(1, _swarmSimulationUniformsSize, ComputeBufferType.Constant);
       _swarmSimulationUniforms = new SwarmSimulationUniforms[1];
     }
 
@@ -37,38 +41,35 @@ namespace AnSim.Runtime
     {
       #region Init all Swarms
       //Update global Swarm Simulation Uniforms
-      _swarmSimulationUniforms[0].time.x = Time.deltaTime;
-      _swarmSimulationUniforms[0].time.y = Time.time;
+      _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
+      _swarmSimulationUniforms[0].timeSinceStart = Time.time;
       _swarmSimulationUniforms[0].worldmax = transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
 
       _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale - transform.position);
 
-      Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, SwarmSimulationUniforms.GetSize());
+      Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
 
       foreach (var swarm in _swarms)
       {
         swarm.SetupSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationSetupKernelData);
       }
       #endregion
-
-
     }
 
     private void Update()
     {
       #region Update all Swarms
       //Update global Swarm Simulation Uniforms
-      _swarmSimulationUniforms[0].time.x = Time.deltaTime;
-      _swarmSimulationUniforms[0].time.y = Time.time;
-      _swarmSimulationUniforms[0].time.z = Time.time;
+      _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
+      _swarmSimulationUniforms[0].timeSinceStart = Time.time;
 
       _swarmSimulationUniforms[0].worldmax = transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
 
-      Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, SwarmSimulationUniforms.GetSize());
+      Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
 
       foreach (var swarm in _swarms)
       {

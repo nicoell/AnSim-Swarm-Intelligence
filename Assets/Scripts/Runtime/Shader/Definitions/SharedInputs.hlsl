@@ -4,8 +4,10 @@
 cbuffer SwarmSimulationUniforms
 {
   float3 worldmin; // World Boundaries Min 
+  float deltaTime;
+  //------------------------------------------- 16byte Boundary
   float3 worldmax; // World Boundaries Max
-  float3 time; //x: DeltaTime y:Time since start
-}
+  float timeSinceStart;
+};
 
 #endif  // SHARED_INPUTS

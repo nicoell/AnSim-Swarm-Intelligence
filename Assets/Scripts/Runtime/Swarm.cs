@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using AnSim.Runtime.Utils;
@@ -89,13 +90,13 @@ namespace AnSim.Runtime
       //Init SlaveSwarmUniformBuffer
       _slaveSwarmUniformBufferNameId =
         Shader.PropertyToID("SlaveSwarmUniforms");
-      _slaveSwarmUniformBuffer = new ComputeBuffer(1, SlaveSwarmUniforms.GetSize(), ComputeBufferType.Constant);
+      _slaveSwarmUniformBuffer = new ComputeBuffer(1,  Marshal.SizeOf(typeof(SlaveSwarmUniforms)), ComputeBufferType.Constant);
       _slaveSwarmUniforms = new SlaveSwarmUniforms[1];
 
       //Init MasterSwarmUniformBuffer
       _masterSwarmUniformBufferNameId =
         Shader.PropertyToID("MasterSwarmUniforms");
-      _masterSwarmUniformBuffer = new ComputeBuffer(1, MasterSwarmUniforms.GetSize(), ComputeBufferType.Constant);
+      _masterSwarmUniformBuffer = new ComputeBuffer(1, Marshal.SizeOf(typeof(MasterSwarmUniforms)), ComputeBufferType.Constant);
       _masterSwarmUniforms = new MasterSwarmUniforms[1];
       #endregion
 
@@ -129,7 +130,7 @@ namespace AnSim.Runtime
       simulationShader.SetBuffer(csKernelData.index, _swarmBufferNameId, _swarmBuffer);
       simulationShader.SetBuffer(csKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 
-      simulationShader.Dispatch(csKernelData.index, maxSlaveSwarmCount, 1, 1);
+      simulationShader.Dispatch(csKernelData.index, GetMaxSwarmCount(), 1, 1);
       #endregion
     }
 
