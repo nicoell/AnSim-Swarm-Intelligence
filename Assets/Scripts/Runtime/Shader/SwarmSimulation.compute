@@ -111,7 +111,8 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint group_index)
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
   
   //TODO: REMOVE DEBUG ONLY
-  particle.position = float3(rand.x, rand.y, rand.y);
+  //particle.position = float3(rand.x, rand.y, rand.y);
+  //particle.position = target;
   //float3(time.y, 1.5, 2.0);
   //particle.velocity = float3(time.x, 0, 0);
   
@@ -142,8 +143,8 @@ void SlaveUpdate(uint3 group : SV_GroupID, uint group_index : SV_GroupIndex, uin
 [numthreads(MASTER_SWARM_SIZE, 1, 1)]
 void MasterUpdate(uint3 group : SV_GroupID, uint group_index : SV_GroupIndex, uint3 id : SV_DispatchThreadID)
 {
-  //Simulate(swarmBufferMasterIndex, swarmParticleBufferMasterOffset + id.x, group_index);
-  Simulate(32, 2048 + id.x, group_index);
+  Simulate(swarmBufferMasterIndex, swarmParticleBufferMasterOffset + id.x, group_index);
+  //Simulate(swarmBufferMasterIndex, swarmBufferMasterIndex * 64 + id.x, group_index);
 }
 #endif
 

@@ -44,8 +44,10 @@ cbuffer MasterSwarmUniforms
   float inertiaWeight; // linearly descreases every iteration
   float3 slaveGlobalBest; // Best global value obtained by the slave swarms
   //------------------------------------------- 16byte Boundary
-  uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer 
   uint swarmParticleBufferMasterOffset; //Index to first Master Swarm Particle in SwarmParticleBuffer
+  uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer 
+  uint p1; //Index to first Master Swarm Particle in SwarmParticleBuffer
+  uint p2; //Index to first Master Swarm Particle in SwarmParticleBuffer
   // +4Byte
   // +4Byte
   //------------------------------------------- 16byte Boundary

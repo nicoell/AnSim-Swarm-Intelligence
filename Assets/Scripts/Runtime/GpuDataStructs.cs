@@ -41,9 +41,13 @@ namespace AnSim.Runtime
     public Vector3 slaveGlobalBest; // Best global value obtained by the slave swarms
     //------------------------------------------- 16byte Boundary
     [FieldOffset(48)]
-    public uint swarmBufferMasterIndex; //Index of SwarmBuffer to Master Swarm
-    [FieldOffset(52)]
     public uint swarmParticleBufferMasterOffset; //Index of SwarmBuffer to Master Swarm
+    [FieldOffset(52)]
+    public uint swarmBufferMasterIndex; //Index of SwarmBuffer to Master Swarm
+    [FieldOffset(56)]
+    public uint p1;
+    [FieldOffset(60)]
+    public uint p2;
     // +4Byte
     // +4Byte
     //------------------------------------------- 16byte Boundary

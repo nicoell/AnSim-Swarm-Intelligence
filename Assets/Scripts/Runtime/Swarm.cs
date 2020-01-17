@@ -59,10 +59,12 @@ namespace AnSim.Runtime
     private int _slaveSwarmUniformBufferNameId;
     private ComputeBuffer _slaveSwarmUniformBuffer;
     private SlaveSwarmUniforms[] _slaveSwarmUniforms;
+    private int _slaveSwarmUniformsSize;
 
     private int _masterSwarmUniformBufferNameId;
     private ComputeBuffer _masterSwarmUniformBuffer;
     private MasterSwarmUniforms[] _masterSwarmUniforms;
+    private int _masterSwarmUniformsSize;
 
     // Rendering
     private uint[] _renderingArgs = {0, 0, 0, 0, 0};
@@ -88,15 +90,17 @@ namespace AnSim.Runtime
       _swarmParticleBuffer = new ComputeBuffer(GetMaxSwarmParticleCount(), SwarmParticleData.GetSize(), ComputeBufferType.Structured);
 
       //Init SlaveSwarmUniformBuffer
+      _slaveSwarmUniformsSize = Marshal.SizeOf(typeof(SlaveSwarmUniforms));
       _slaveSwarmUniformBufferNameId =
         Shader.PropertyToID("SlaveSwarmUniforms");
-      _slaveSwarmUniformBuffer = new ComputeBuffer(1,  Marshal.SizeOf(typeof(SlaveSwarmUniforms)), ComputeBufferType.Constant);
+      _slaveSwarmUniformBuffer = new ComputeBuffer(1, _slaveSwarmUniformsSize, ComputeBufferType.Constant);
       _slaveSwarmUniforms = new SlaveSwarmUniforms[1];
 
       //Init MasterSwarmUniformBuffer
+      _masterSwarmUniformsSize = Marshal.SizeOf(typeof(MasterSwarmUniforms));
       _masterSwarmUniformBufferNameId =
         Shader.PropertyToID("MasterSwarmUniforms");
-      _masterSwarmUniformBuffer = new ComputeBuffer(1, Marshal.SizeOf(typeof(MasterSwarmUniforms)), ComputeBufferType.Constant);
+      _masterSwarmUniformBuffer = new ComputeBuffer(1, _masterSwarmUniformsSize, ComputeBufferType.Constant);
       _masterSwarmUniforms = new MasterSwarmUniforms[1];
       #endregion
 
@@ -148,7 +152,8 @@ namespace AnSim.Runtime
       _slaveSwarmUniformBuffer.SetData(_slaveSwarmUniforms);
 
       //Set all Buffers
-      simulationShader.SetBuffer(slaveSimKernelData.index, _slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer);
+      //simulationShader.SetBuffer(slaveSimKernelData.index, _slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer);
+      Shader.SetGlobalConstantBuffer(_slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer, 0, _slaveSwarmUniformsSize);
       simulationShader.SetBuffer(slaveSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
       simulationShader.SetBuffer(slaveSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 
@@ -167,13 +172,14 @@ namespace AnSim.Runtime
       _masterSwarmUniforms[0].slaveGlobalBest = targetTransform.position; //TODO: Use actual best result of best SlaveSwarm
 
       _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
-      _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = (uint)GetMaxSlaveSwarmParticleCount();
+      _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = 2048;//(uint)GetMaxSlaveSwarmParticleCount();
 
       //Update Uniform Buffer
       _masterSwarmUniformBuffer.SetData(_masterSwarmUniforms);
 
       //Set all Buffers
-      simulationShader.SetBuffer(masterSimKernelData.index, _masterSwarmUniformBufferNameId, _masterSwarmUniformBuffer);
+      //simulationShader.SetBuffer(masterSimKernelData.index, _masterSwarmUniformBufferNameId, _masterSwarmUniformBuffer);
+      Shader.SetGlobalConstantBuffer(_masterSwarmUniformBufferNameId, _masterSwarmUniformBuffer, 0, _masterSwarmUniformsSize);
       simulationShader.SetBuffer(masterSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
       simulationShader.SetBuffer(masterSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 

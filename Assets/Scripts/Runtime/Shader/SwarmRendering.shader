@@ -32,11 +32,11 @@
         SwarmParticleData particle = SwarmParticleBuffer[instanceID];
 
         VertOut o;
-        o.pos = mul(UNITY_MATRIX_VP,
-                    vertIn.vertex + float4(0.1 * instanceID, 0.1 * instanceID,
-                                           0.1 * instanceID, 1)
+        o.pos = mul(UNITY_MATRIX_VP, vertIn.vertex + float4(particle.position, 1)
+          /*float4(0.1 * instanceID, 0.1 * instanceID,
+                                           0.1 * instanceID, 1)*/
             /* + float4(particle.position, 1)*/);
-        o.color = particleTint * float4((particle.position), 1);
+        o.color = particleTint;
         return o;
       }
 
