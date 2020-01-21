@@ -30,7 +30,7 @@ namespace AnSim.Runtime
             anSimShaderPath + "SwarmRendering.shader"),
       };
 
-      shaders.swarmSimulationSetupKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "Setup");
+      shaders.swarmSimulationMaskedResetKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MaskedReset");
 
       shaders.swarmSimulationSlaveUpdateKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "SlaveUpdate");
 
@@ -47,7 +47,7 @@ namespace AnSim.Runtime
     public sealed class ShaderResources
     {
       public ComputeShader swarmSimulationComputeShader;
-      public CsKernelData swarmSimulationSetupKernelData;
+      public CsKernelData swarmSimulationMaskedResetKernelData;
       public CsKernelData swarmSimulationSlaveUpdateKernelData;
       public CsKernelData swarmSimulationMasterUpdateKernelData;
       public Shader swarmRenderingShader;

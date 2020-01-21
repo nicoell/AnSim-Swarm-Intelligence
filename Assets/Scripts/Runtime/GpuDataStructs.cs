@@ -38,22 +38,22 @@ namespace AnSim.Runtime
     [FieldOffset(32)]
     public float inertiaWeight; // linearly descreases every iteration
     [FieldOffset(36)]
-    public Vector3 slaveGlobalBest; // Best global value obtained by the slave swarms
+    public Vector3 maxVelocity; // Max velocity
     //------------------------------------------- 16byte Boundary
     [FieldOffset(48)]
     public uint swarmParticleBufferMasterOffset; //Index of SwarmBuffer to Master Swarm
     [FieldOffset(52)]
     public uint swarmBufferMasterIndex; //Index of SwarmBuffer to Master Swarm
-    [FieldOffset(56)]
-    public uint p1;
-    [FieldOffset(60)]
-    public uint p2;
+    //[FieldOffset(56)]
+    //public uint p1;
+    //[FieldOffset(60)]
+    //public uint p2;
     // +4Byte
     // +4Byte
     //------------------------------------------- 16byte Boundary
   }
 
-  [StructLayout(LayoutKind.Explicit, Size = 32)]
+  [StructLayout(LayoutKind.Explicit, Size = 48)]
   public struct SlaveSwarmUniforms
   {
     [FieldOffset(0)]
@@ -69,6 +69,10 @@ namespace AnSim.Runtime
     public Vector3 target;
     [FieldOffset(28)]
     public float inertiaWeight;
+    //------------------------------------------- 16byte Boundary
+    [FieldOffset(32)]
+    public Vector3 maxVelocity;
+    // +4Byte
     //------------------------------------------- 16byte Boundary
   }
 
@@ -87,23 +91,48 @@ namespace AnSim.Runtime
     //------------------------------------------- 16byte Boundary
   }
 
+  [StructLayout(LayoutKind.Explicit, Size = 48)]
+  public struct SwarmResetUniforms
+  {
+    [FieldOffset(0)]
+    public Vector3 resetPosition;
+    [FieldOffset(12)]
+    public float positionVariance;
+    //------------------------------------------- 16byte Boundary
+    [FieldOffset(16)]
+    public Vector3 target;
+    [FieldOffset(28)]
+    public float velocityVariance;
+    //------------------------------------------- 16byte Boundary
+    [FieldOffset(32)]
+    public uint enablePositionReset;
+    [FieldOffset(36)]
+    public uint enableVelocityReset;
+    [FieldOffset(40)]
+    public uint reviveParticles;
+    // +4Byte
+    //------------------------------------------- 16byte Boundary
+  }
+
   public struct SwarmParticleData
   {
     public Vector3 position;
     public Vector3 velocity;
+    private float health;
     public Vector3 localBest;
     public float fitness;
 
-    public static int GetSize() => (3 + 3 + 3 + 1) * sizeof(float);
+    public static int GetSize() => (3 + 3 + 1 + 3 + 1) * sizeof(float);
   }
 
   public struct SwarmData
   {
     public Vector3 globalBest; //best solution of all particles in a swarm
     public float fitness; //rating of the globalBest
-    public Vector2 rand;
+    public int particlesAlive;
+    //public Vector2 rand;
 
-    public static int GetSize() => (3 + 1 + 2) * sizeof(float);
+    public static int GetSize() => (3 + 1 + 1) * sizeof(float);
   };
 
 }

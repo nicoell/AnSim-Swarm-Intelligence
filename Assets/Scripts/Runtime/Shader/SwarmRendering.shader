@@ -14,8 +14,10 @@
 #include "Definitions/Structs.hlsl"
 #include "UnityCG.cginc"
 
+      StructuredBuffer<uint> SwarmIndexBuffer;
       StructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
       uniform float4 particleTint;
+      uniform uint swarmSize;
 
       struct VertIn {
         float4 vertex : POSITION;
@@ -29,14 +31,22 @@
 
       VertOut vert(VertIn vertIn, uint instanceID : SV_InstanceID) 
       {
-        SwarmParticleData particle = SwarmParticleBuffer[instanceID];
+        uint swarmIndexBufferIndex = instanceID / swarmSize;
+        uint groupIndex = instanceID % swarmSize;
+        uint particleIndex =
+            SwarmIndexBuffer[swarmIndexBufferIndex] * swarmSize + groupIndex;
+        SwarmParticleData particle = SwarmParticleBuffer[particleIndex];
 
         VertOut o;
-        o.pos = mul(UNITY_MATRIX_VP, vertIn.vertex + float4(particle.position, 1)
-          /*float4(0.1 * instanceID, 0.1 * instanceID,
-                                           0.1 * instanceID, 1)*/
-            /* + float4(particle.position, 1)*/);
-        o.color = particleTint;
+        o.pos = float4(vertIn.vertex.xyz + particle.position.xyz, 1);
+        //o.pos.xyz = vertIn.vertex.xyz + float3(particleIndex, particleIndex, particleIndex);
+        o.pos = mul(UNITY_MATRIX_VP, o.pos);
+        o.color = float(swarmIndexBufferIndex)/ 32.0 * particleTint * particle.health;
+
+        //Debug Color Master Swarm
+        if (swarmIndexBufferIndex == 32) {
+          o.color = float4(1, 0, 0, 1);
+        }
         return o;
       }
 

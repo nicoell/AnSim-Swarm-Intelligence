@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Runtime.InteropServices;
 using AnSim;
+using JetBrains.Annotations;
 using UnityEngine;
 
 namespace AnSim.Runtime
@@ -10,7 +11,7 @@ namespace AnSim.Runtime
   {
     [Header("Resource Management")]
     public SimulationResources simulationResources;
-
+    
     [Header("Simulation Settings")]
     [Range(1, 32)]
     public uint maxSwarmCount = 8;
@@ -53,7 +54,7 @@ namespace AnSim.Runtime
 
       foreach (var swarm in _swarms)
       {
-        swarm.SetupSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationSetupKernelData);
+        swarm.SetupSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData);
       }
       #endregion
     }
@@ -76,7 +77,7 @@ namespace AnSim.Runtime
 
       foreach (var swarm in _swarms)
       {
-        swarm.RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);
+        swarm.RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);
       }
 
       foreach (var swarm in _swarms)
@@ -102,29 +103,34 @@ namespace AnSim.Runtime
 
     public void RegisterSwarm(Swarm swarm)
     {
-      if (_swarms != null && _swarms.All(item => item.GetInstanceID() != swarm.GetInstanceID())) _swarms.Add(swarm);
+      if (_swarms != null)
+      {
+        if (_swarms.All(item => item.GetInstanceID() != swarm.GetInstanceID()))
+        {
+          _swarms.Add(swarm);
+          Debug.Log("Registered Swarm: " + swarm.name);
+        } else
+        {
+          Debug.Log("SwarmList already contains swarm: " + swarm.name);
+        }
+      } else
+      {
+        Debug.Log("Swarm tried to register itself before Swarms List was created.");
+        Debug.Log("Please change the Script Execution Order, so SwarmSimManager comes before Swarm.");
+      }
+        
     }
 
     public void RemoveDisabledSwarms()
     {
-      _swarms.RemoveAll(item => item == null || !item.enabled);
+      _swarms.RemoveAll(item => item == null || !item.IsActive);
     }
 
-    public int GetSlaveSwarmSize()
+    public int GetSwarmSize()
     {
       if (simulationResources)
       {
         return (int)simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.numThreadsX;
-      }
-
-      return 0;
-    }
-
-    public int GetMasterSwarmSize()
-    {
-      if (simulationResources)
-      {
-        return (int)simulationResources.shaders.swarmSimulationMasterUpdateKernelData.numThreadsX;
       }
 
       return 0;

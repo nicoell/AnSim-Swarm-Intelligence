@@ -1,19 +1,21 @@
 ﻿#ifndef SIMULATION_INPUTS
 #define SIMULATION_INPUTS
 
-#if defined(__INTELLISENSE__)
-#define SETUP_ONLY
-#define SLAVE_SIM 
-#define MASTER_SIM
-#define SLAVE_OR_MASTER
-#endif
-
-
 #ifdef SETUP_ONLY
-float3 startPosition;
-float3 target;
-float positionVariance;
-float velocityVariance;
+cbuffer SwarmResetUniforms
+{
+  float3 resetPosition;
+  float positionVariance;
+  //------------------------------------------- 16byte Boundary
+  float3 target;
+  float velocityVariance;
+  //------------------------------------------- 16byte Boundary
+  bool enablePositionReset;
+  bool enableVelocityReset;
+  bool reviveParticles;
+  // +4Byte
+  //------------------------------------------- 16byte Boundary
+}
 #endif
 
 #ifdef SLAVE_SIM
@@ -26,6 +28,9 @@ cbuffer SlaveSwarmUniforms
   //------------------------------------------- 16byte Boundary
   float3 target; // Target Position
   float inertiaWeight; // linearly descreases every iteration
+  //------------------------------------------- 16byte Boundary
+  float3 maxVelocity;
+  // +4Byte
   //------------------------------------------- 16byte Boundary
 };
 #endif
@@ -42,7 +47,7 @@ cbuffer MasterSwarmUniforms
   float3 target; // Target Position
   //------------------------------------------- 16byte Boundary
   float inertiaWeight; // linearly descreases every iteration
-  float3 slaveGlobalBest; // Best global value obtained by the slave swarms
+  float3 maxVelocity; // Best global value obtained by the slave swarms
   //------------------------------------------- 16byte Boundary
   uint swarmParticleBufferMasterOffset; //Index to first Master Swarm Particle in SwarmParticleBuffer
   uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer 
