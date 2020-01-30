@@ -33,18 +33,19 @@
       {
         uint swarmIndexBufferIndex = instanceID / swarmSize;
         uint groupIndex = instanceID % swarmSize;
-        uint particleIndex =
-            SwarmIndexBuffer[swarmIndexBufferIndex] * swarmSize + groupIndex;
+        uint swarmIndex =
+            SwarmIndexBuffer[swarmIndexBufferIndex];
+        uint particleIndex = swarmIndex * swarmSize + groupIndex;
         SwarmParticleData particle = SwarmParticleBuffer[particleIndex];
 
         VertOut o;
         o.pos = float4(vertIn.vertex.xyz + particle.position.xyz, 1);
         //o.pos.xyz = vertIn.vertex.xyz + float3(particleIndex, particleIndex, particleIndex);
         o.pos = mul(UNITY_MATRIX_VP, o.pos);
-        o.color = float(swarmIndexBufferIndex)/ 32.0 * particleTint * particle.health;
+        o.color = /*float(swarmIndex)/ 32.0 * */particleTint * particle.health;
 
         //Debug Color Master Swarm
-        if (swarmIndexBufferIndex == 32) {
+        if (swarmIndex == 32) {
           o.color = float4(1, 0, 0, 1);
         }
         return o;

@@ -5,7 +5,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using AnSim.Runtime.Utils;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace AnSim.Runtime
 {
@@ -13,7 +15,7 @@ namespace AnSim.Runtime
   {
     [Header("Dependencies")]
     public SwarmSimManager swarmSimManager;
-    public Transform targetTransform;
+    public FoodSource foodSource;
 
     [Header("Fixed Simulation Settings")]
     [Range(1, 2048)]
@@ -48,6 +50,10 @@ namespace AnSim.Runtime
     [Range(0.1f, 2.0f)]
     public float maxVelocity = .1f; //Per component
 
+    [Header("Swarm AI Settings")]
+    public float asyncGpuRequestInterval = 2.0f; //Per component
+    public uint maxGpuRequestQueueLength = 2; //Per component
+
     [Header("Render Settings")]
     public Mesh particleMesh;
     public int subMeshIndex = 0;
@@ -73,9 +79,12 @@ namespace AnSim.Runtime
     private ComputeBuffer[] _swarmIndexBuffers;
     private uint[] _swarmIndexData;
 
+    private int _swarmCounterBufferNameId;
+    private ComputeBuffer _swarmCounterBuffer;
+
     private int _indirectDispatchWriteBufferNameId;
     private uint[] _indirectDispatchArgs;
-    private ComputeBuffer[] _indirectDispatchArgBuffers;
+    private ComputeBuffer _indirectDispatchArgBuffer;
 
     private int _swarmBufferNameId;
     private ComputeBuffer _swarmBuffer;
@@ -101,6 +110,11 @@ namespace AnSim.Runtime
     private MasterSwarmUniforms[] _masterSwarmUniforms;
     private int _masterSwarmUniformsSize;
 
+    // Swarm Logic Stuff
+    private Queue<AsyncGPUReadbackRequest> _swarmDataRequests = new Queue<AsyncGPUReadbackRequest>();
+    private float _asyncGpuRequestTimer = 0;
+    private int _numberOfSwarmsToRevive = 0;
+
     // Rendering
     private uint[] _renderingArgs = { 0, 0, 0, 0, 0 };
     private ComputeBuffer _renderingArgBuffer;
@@ -108,7 +122,7 @@ namespace AnSim.Runtime
 
     private void Awake()
     {
-      _cachedTarget = targetTransform.position;
+      _cachedTarget = foodSource.transform.position;
       _swarmSize = swarmSimManager.GetSwarmSize();
       _pingPongIndex = new PingPongIndex();
 
@@ -134,15 +148,14 @@ namespace AnSim.Runtime
       _swarmIndexBuffers[0].SetData(_swarmIndexData);
       _swarmIndexBuffers[1].SetData(_swarmIndexData);
 
+      _swarmCounterBufferNameId = Shader.PropertyToID("SwarmCounterBuffer");
+      _swarmCounterBuffer = new ComputeBuffer(1, sizeof(uint), ComputeBufferType.Counter);
+      _swarmCounterBuffer.SetCounterValue(0u);
+
       _indirectDispatchWriteBufferNameId = Shader.PropertyToID("RWIndirectDispatchBuffer");
       _indirectDispatchArgs = new[] { (uint)GetCurrentSwarmCount(), 1u, 1u };
-      _indirectDispatchArgBuffers = new[]
-      {
-        new ComputeBuffer(1, _indirectDispatchArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments),
-        new ComputeBuffer(1, _indirectDispatchArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments)
-      };
-      _indirectDispatchArgBuffers[0].SetData(_indirectDispatchArgs);
-      _indirectDispatchArgBuffers[1].SetData(_indirectDispatchArgs);
+      _indirectDispatchArgBuffer = new ComputeBuffer(1, _indirectDispatchArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+      _indirectDispatchArgBuffer.SetData(_indirectDispatchArgs);
 
       //Init Index Mask Buffer
       //_swarmIndexMaskBufferId = Shader.PropertyToID("SwarmIndexMaskBuffer");
@@ -208,11 +221,14 @@ namespace AnSim.Runtime
     public void SetupSimulation(ComputeShader simulationShader,
     in CsKernelData csKernelData)
     {
+      /*
+       *
+       */
       //Set Uniforms for Setup
       var swarmSetupUniforms = new SwarmResetUniforms()
       {
         resetPosition = transform.position,
-        target = targetTransform.position,
+        target = foodSource.transform.position,
         positionVariance = setupPositionVariance,
         velocityVariance = setupVelocityVariance,
         enablePositionReset = 1,
@@ -228,6 +244,161 @@ namespace AnSim.Runtime
       ResetSwarmWithMask(simulationShader, csKernelData, GetMaxSwarmCount(), swarmIndexMaskData, swarmSetupUniforms);
     }
 
+    public void RunSimulation(ComputeShader simulationShader, in CsKernelData maskedResetKernelData, in CsKernelData slaveSimKernelData, in CsKernelData masterSimKernelData)
+    {
+      ProcessSwarmLogicAsync();
+
+      #region Target Update with Swarm Reset if target changed
+      //Check if Swarm needs to be reset in some way
+      if (!foodSource.transform.position.Equals(_cachedTarget))
+      {
+        //Set Uniforms for Setup
+        var swarmSetupUniforms = new SwarmResetUniforms()
+        {
+          resetPosition = Vector3.zero,
+          target = foodSource.transform.position,
+          positionVariance = 0,
+          velocityVariance = 0,
+          enablePositionReset = 0,
+          enableVelocityReset = 0,
+          reviveParticles = 0,
+          resetOnlyIfRevived = 0
+        };
+        //Set Mask Buffer covering all swarms
+        var swarmIndexMaskData = new uint[GetMaxSwarmCount()];
+        for (uint i = 0; i < GetMaxSwarmCount(); i++)
+        {
+          swarmIndexMaskData[i] = i;
+        }
+        ResetSwarmWithMask(simulationShader, maskedResetKernelData, GetMaxSwarmCount(), swarmIndexMaskData, swarmSetupUniforms);
+
+        // Reset InertiaWeight
+        // TODO: Implement better control
+        //_slaveSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
+        //_masterSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
+
+        _cachedTarget = foodSource.transform.position;
+      }
+      #endregion
+
+      #region Run SlaveSwarm Simulation
+      //Update Uniform Data
+      _slaveSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
+      _slaveSwarmUniforms[0].c1 = individualAccelerationConstant;
+      _slaveSwarmUniforms[0].c2 = socialAccelerationConstant;
+      //Updated after simulation
+      //_slaveSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
+      _slaveSwarmUniforms[0].n = replicatesPerParticle;
+      _slaveSwarmUniforms[0].target = foodSource.transform.position;
+      _slaveSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
+      //Update Uniform Buffer
+      _slaveSwarmUniformBuffer.SetData(_slaveSwarmUniforms);
+
+      //Set all Buffers
+      Shader.SetGlobalConstantBuffer(_slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer, 0, _slaveSwarmUniformsSize);
+      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
+      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmIndexBufferIds[1], _swarmIndexBuffers[_pingPongIndex.Pong]);
+      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmCounterBufferNameId, _swarmCounterBuffer);
+      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
+      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
+
+      simulationShader.DispatchIndirect(slaveSimKernelData.index, _indirectDispatchArgBuffer);
+      #endregion
+
+      //DEBUG
+      //_numberOfSwarmsToRevive = 1;
+
+      #region Run MasterSwarm Simulation
+      //Update Uniform Data
+      _masterSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
+      _masterSwarmUniforms[0].c1 = individualAccelerationConstant;
+      _masterSwarmUniforms[0].c2 = socialAccelerationConstant;
+      _masterSwarmUniforms[0].c3 = masterAccelerationConstant;
+      //Updated after simulation
+      //_masterSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
+      _masterSwarmUniforms[0].n = replicatesPerParticle;
+      _masterSwarmUniforms[0].target = foodSource.transform.position;
+      _masterSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
+
+      _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
+      _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = (uint)GetMaxSlaveSwarmParticleCount();
+
+      //Update Uniform Buffer
+      _masterSwarmUniformBuffer.SetData(_masterSwarmUniforms);
+
+      //Set all Buffers
+      Shader.SetGlobalConstantBuffer(_masterSwarmUniformBufferNameId, _masterSwarmUniformBuffer, 0, _masterSwarmUniformsSize);
+      simulationShader.SetBuffer(masterSimKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
+      simulationShader.SetBuffer(masterSimKernelData.index, _swarmIndexBufferIds[1], _swarmIndexBuffers[_pingPongIndex.Pong]);
+      simulationShader.SetBuffer(masterSimKernelData.index, _swarmCounterBufferNameId, _swarmCounterBuffer);
+      simulationShader.SetBuffer(masterSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
+      simulationShader.SetBuffer(masterSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
+
+      simulationShader.SetInt("numberOfSwarmsToRevive", _numberOfSwarmsToRevive);
+
+      simulationShader.Dispatch(masterSimKernelData.index, 1, 1, 1);
+      #endregion
+
+      //Update DispatchArgs with SwarmCounterBuffer Data
+      ComputeBuffer.CopyCount(_swarmCounterBuffer, _indirectDispatchArgBuffer, 0);
+      //Reset Counter Value
+      _swarmCounterBuffer.SetCounterValue(0u);
+
+      #region AI Masked Update
+
+      //TODO: Maybe add more conditions to update swarm here
+      if (_numberOfSwarmsToRevive > 0)
+      {
+        //Set Uniforms for Setup
+        var swarmSetupUniforms = new SwarmResetUniforms()
+        {
+          resetPosition = Vector3.zero,
+          target = foodSource.transform.position,
+          positionVariance = 0,
+          velocityVariance = 1,
+          enablePositionReset = 1,
+          enableVelocityReset = 1,
+          reviveParticles = 1,
+          resetOnlyIfRevived = 1
+        };
+        ResetActiveSwarm(simulationShader, maskedResetKernelData, swarmSetupUniforms);
+
+      }
+
+      #endregion
+
+      // Update InertiaWeight only after simulations has run
+      _slaveSwarmUniforms[0].inertiaWeight = Mathf.Max(inertiaWeightMin, _slaveSwarmUniforms[0].inertiaWeight * inertiaWeightModifier); ;
+      _masterSwarmUniforms[0].inertiaWeight = Mathf.Max(inertiaWeightMin, _slaveSwarmUniforms[0].inertiaWeight * inertiaWeightModifier); ;
+
+      //Reset AI and other values
+      _numberOfSwarmsToRevive = 0;
+    }
+
+    public void Render(in Material material, in Bounds bounds)
+    {
+      // Update Arguments and Uniforms
+      subMeshIndex = Mathf.Clamp(subMeshIndex, 0, particleMesh.subMeshCount - 1);
+      _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndex);
+      _renderingArgs[1] = (uint)GetCurrentSwarmParticleCount();
+      _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndex);
+      _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndex);
+      _renderingArgBuffer.SetData(_renderingArgs);
+
+      _materialProperties.SetBuffer(_swarmParticleBufferNameId, _swarmParticleBuffer);
+
+      _materialProperties.SetBuffer(_swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
+      _materialProperties.SetColor("particleTint", particleTint);
+      _materialProperties.SetInt("swarmSize", _swarmSize);
+
+      Graphics.DrawMeshInstancedIndirect(particleMesh, subMeshIndex, material, bounds, _renderingArgBuffer, 0, _materialProperties);
+
+
+      //Swap PingPong Indices
+      _pingPongIndex.Advance();
+    }
+
+    
     private void ResetSwarmWithMask(ComputeShader simulationShader,
       in CsKernelData csKernelData, int swarmResetCount, uint[] swarmIndexMaskData, SwarmResetUniforms swarmResetUniforms)
     {
@@ -254,119 +425,79 @@ namespace AnSim.Runtime
       simulationShader.Dispatch(csKernelData.index, swarmResetCount, 1, 1);
     }
 
-    public void RunSimulation(ComputeShader simulationShader, in CsKernelData maskedResetKernelData, in CsKernelData slaveSimKernelData, in CsKernelData masterSimKernelData)
+    private void ResetActiveSwarm(ComputeShader simulationShader,
+      in CsKernelData csKernelData, SwarmResetUniforms swarmResetUniforms)
     {
-      #region Reset Swarm if necessary
-      //Check if Swarm needs to be reset in some way
-      if (!targetTransform.position.Equals(_cachedTarget))
-      {
-        //Set Uniforms for Setup
-        var swarmSetupUniforms = new SwarmResetUniforms()
-        {
-          resetPosition = Vector3.zero,
-          target = targetTransform.position,
-          positionVariance = 0,
-          velocityVariance = 0,
-          enablePositionReset = 0,
-          enableVelocityReset = 0,
-          reviveParticles = 1
-        };
-        //Set Mask Buffer covering all swarms
-        var swarmIndexMaskData = new uint[GetMaxSwarmCount()];
-        for (uint i = 0; i < GetMaxSwarmCount(); i++)
-        {
-          swarmIndexMaskData[i] = i;
-        }
-        ResetSwarmWithMask(simulationShader, maskedResetKernelData, GetMaxSwarmCount(), swarmIndexMaskData, swarmSetupUniforms);
+      //Update and Set Uniform Buffer
+      SwarmResetUniforms[] uniformsAsArray = { swarmResetUniforms };
+      _swarmResetUniformBuffer.SetData(uniformsAsArray);
+      Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
 
-        // Reset InertiaWeight
-        _slaveSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
-        _masterSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
+      //Update and Set IndexMaskBuffer
+      simulationShader.SetBuffer(csKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Pong]);
 
-        _cachedTarget = targetTransform.position;
-      }
-      #endregion
-
-      #region Run SlaveSwarm Simulation
-      //Update Uniform Data
-      _slaveSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
-      _slaveSwarmUniforms[0].c1 = individualAccelerationConstant;
-      _slaveSwarmUniforms[0].c2 = socialAccelerationConstant;
-      //Updated after simulation
-      //_slaveSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
-      _slaveSwarmUniforms[0].n = replicatesPerParticle;
-      _slaveSwarmUniforms[0].target = targetTransform.position;
-      _slaveSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
-      //Update Uniform Buffer
-      _slaveSwarmUniformBuffer.SetData(_slaveSwarmUniforms);
-
-      //Set all Buffers
-      Shader.SetGlobalConstantBuffer(_slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer, 0, _slaveSwarmUniformsSize);
-      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
-      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmIndexBufferIds[1], _swarmIndexBuffers[_pingPongIndex.Pong]);
-      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
-      simulationShader.SetBuffer(slaveSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
-      simulationShader.SetBuffer(slaveSimKernelData.index, _indirectDispatchWriteBufferNameId, _indirectDispatchArgBuffers[_pingPongIndex.Ping]);
-
-      simulationShader.DispatchIndirect(slaveSimKernelData.index, _indirectDispatchArgBuffers[_pingPongIndex.Ping]);
-      #endregion
-
-      #region Run MasterSwarm Simulation
-      //Update Uniform Data
-      _masterSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
-      _masterSwarmUniforms[0].c1 = individualAccelerationConstant;
-      _masterSwarmUniforms[0].c2 = socialAccelerationConstant;
-      _masterSwarmUniforms[0].c3 = masterAccelerationConstant;
-      //Updated after simulation
-      //_masterSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
-      _masterSwarmUniforms[0].n = replicatesPerParticle;
-      _masterSwarmUniforms[0].target = targetTransform.position;
-      _masterSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
-
-      _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
-      _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = 2048;//(uint)GetMaxSlaveSwarmParticleCount();
-
-      //Update Uniform Buffer
-      _masterSwarmUniformBuffer.SetData(_masterSwarmUniforms);
-
-      //Set all Buffers
-      Shader.SetGlobalConstantBuffer(_masterSwarmUniformBufferNameId, _masterSwarmUniformBuffer, 0, _masterSwarmUniformsSize);
-      simulationShader.SetBuffer(masterSimKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
-      simulationShader.SetBuffer(masterSimKernelData.index, _swarmIndexBufferIds[1], _swarmIndexBuffers[_pingPongIndex.Pong]);
-      simulationShader.SetBuffer(masterSimKernelData.index, _swarmBufferNameId, _swarmBuffer);
-      simulationShader.SetBuffer(masterSimKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
-      simulationShader.SetBuffer(masterSimKernelData.index, _indirectDispatchWriteBufferNameId, _indirectDispatchArgBuffers[_pingPongIndex.Ping]);
-
-      simulationShader.DispatchIndirect(masterSimKernelData.index, _indirectDispatchArgBuffers[_pingPongIndex.Ping]);
-      #endregion
+      //Set Swarm Buffers
+      simulationShader.SetBuffer(csKernelData.index, _swarmBufferNameId, _swarmBuffer);
+      simulationShader.SetBuffer(csKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 
 
-      // Update InertiaWeight only after simulations has run
-      _slaveSwarmUniforms[0].inertiaWeight = Mathf.Max(inertiaWeightMin, _slaveSwarmUniforms[0].inertiaWeight * inertiaWeightModifier); ;
-      _masterSwarmUniforms[0].inertiaWeight = Mathf.Max(inertiaWeightMin, _slaveSwarmUniforms[0].inertiaWeight * inertiaWeightModifier); ;
+      simulationShader.DispatchIndirect(csKernelData.index, _indirectDispatchArgBuffer);
     }
 
-    public void Render(in Material material, in Bounds bounds)
+    private void ProcessSwarmLogicAsync()
     {
-      // Update Arguments and Uniforms
-      subMeshIndex = Mathf.Clamp(subMeshIndex, 0, particleMesh.subMeshCount - 1);
-      _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndex);
-      _renderingArgs[1] = (uint)GetCurrentSwarmParticleCount();
-      _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndex);
-      _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndex);
-      _renderingArgBuffer.SetData(_renderingArgs);
+      while (_swarmDataRequests.Count > 0)
+      {
+        var request = _swarmDataRequests.Peek(); //Peek at head of queue
 
-      _materialProperties.SetBuffer(_swarmParticleBufferNameId, _swarmParticleBuffer);
+        if (request.hasError)
+        {
+          Debug.Log("Error in AsyncGPUReadbackRequest");
+          _swarmDataRequests.Dequeue();
+        }
+        else if (request.done)
+        {
+          NativeArray<SwarmData> swarmDataArray = request.GetData<SwarmData>();
+          /* ---------------------------------------------------------------
+           * Implement Swarm Logic here:
+           * ---------------------------------------------------------------
+           */
+          uint swarmsAlive = 0;
+          for (int i = 0; i < swarmDataArray.Length; i++)
+          {
+            var swarm = swarmDataArray[i];
+            if ((swarm.particlesAlive == 0)) continue;
 
-      _materialProperties.SetBuffer(_swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
-      _materialProperties.SetColor("particleTint", particleTint);
-      _materialProperties.SetInt("swarmSize", _swarmSize);
+            swarmsAlive++;
 
-      Graphics.DrawMeshInstancedIndirect(particleMesh, subMeshIndex, material, bounds, _renderingArgBuffer, 0, _materialProperties);
+            if (swarm.fitness < 5.5f)
+            {
+              _numberOfSwarmsToRevive += foodSource.EatFood();
+              Debug.Log("Mark all swarms to revive");
+            }
 
+          }
 
-      //Swap PingPong Indices
-      _pingPongIndex.Advance();
+          Debug.Log(swarmsAlive + " swarms alive.");
+
+          /*
+           *  ---------------------------------------------------------------
+           */
+          _swarmDataRequests.Dequeue();
+        }
+        else
+        {
+          break;
+        }
+      }
+
+      _asyncGpuRequestTimer += Time.deltaTime;
+      if (_asyncGpuRequestTimer > asyncGpuRequestInterval && _swarmDataRequests.Count < maxGpuRequestQueueLength - 1)
+      {
+        _asyncGpuRequestTimer = 0;
+        _swarmDataRequests.Enqueue(AsyncGPUReadback.Request(_swarmBuffer));
+      }
+
     }
 
     private void OnDisable()
@@ -400,7 +531,7 @@ namespace AnSim.Runtime
     private void OnDrawGizmos()
     {
       Gizmos.color = particleTint;
-      Gizmos.DrawWireSphere(targetTransform.position, 1f);
+      Gizmos.DrawWireSphere(foodSource.transform.position, 1f);
     }
 
     private void OnValidate()

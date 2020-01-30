@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Runtime.InteropServices;
 using AnSim;
+using AnSim.Runtime.Utils;
 using JetBrains.Annotations;
 using UnityEngine;
 
@@ -75,6 +76,8 @@ namespace AnSim.Runtime
 
       Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
 
+      _swarms.Shuffle(); //Shuffle swarms to reduce disadvantaging any swarm in reaching a target
+
       foreach (var swarm in _swarms)
       {
         swarm.RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);
@@ -134,6 +137,20 @@ namespace AnSim.Runtime
       }
 
       return 0;
+    }
+
+    /*
+     * Returns a valid position inside Simulation Boounds
+     * TODO: Prevent position be to be inside environment.
+     */
+    public Vector3 GetValidFoodPosition()
+    {
+      var foodPos = new Vector3(
+        Random.Range(_simulationBounds.min.x, _simulationBounds.max.x),
+        Random.Range(_simulationBounds.min.y, _simulationBounds.max.y),
+        Random.Range(_simulationBounds.min.z, _simulationBounds.max.z)
+      );
+      return foodPos;
     }
 
     private void OnDrawGizmos()

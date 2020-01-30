@@ -110,7 +110,8 @@ namespace AnSim.Runtime
     public uint enableVelocityReset;
     [FieldOffset(40)]
     public uint reviveParticles;
-    // +4Byte
+    [FieldOffset(44)]
+    public uint resetOnlyIfRevived; //Only reset pos and velocity if particle actually gets revived (health of particle was 0)
     //------------------------------------------- 16byte Boundary
   }
 
@@ -118,7 +119,7 @@ namespace AnSim.Runtime
   {
     public Vector3 position;
     public Vector3 velocity;
-    private float health;
+    public float health;
     public Vector3 localBest;
     public float fitness;
 
@@ -129,7 +130,7 @@ namespace AnSim.Runtime
   {
     public Vector3 globalBest; //best solution of all particles in a swarm
     public float fitness; //rating of the globalBest
-    public int particlesAlive;
+    public uint particlesAlive;
     //public Vector2 rand;
 
     public static int GetSize() => (3 + 1 + 1) * sizeof(float);

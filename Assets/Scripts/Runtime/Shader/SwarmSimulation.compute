@@ -26,7 +26,8 @@ RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
 
 // Shared Memory
 groupshared float4 gsLocalBestAndFitness[SWARM_SIZE];
-uint GetGSLocalBestIndex()
+
+inline uint GetGSLocalBestIndex()
 {
   uint indexToBest = 0;
   float fitnessComparison = 100000000; // 3.402823466e+38F
@@ -38,7 +39,6 @@ uint GetGSLocalBestIndex()
       fitnessComparison = gsLocalBestAndFitness[i].w;
     }
   }
-  
   return indexToBest;
 }
 
@@ -46,67 +46,81 @@ inline float IsPositiveAsFloat(float x)
 {
   return (float) (x > 0);
 }
-
 inline float IsZeroOrNegativeAsFloat(float x)
 {
   return (float) (x <= 0);
 }
-
 inline bool IsPositive(float x)
 {
   return (x > 0);
 }
 
 #ifdef SLAVE_OR_MASTER
-
 RWStructuredBuffer<uint> RWSwarmIndexBuffer;
-RWBuffer<uint> RWIndirectDispatchBuffer;
+RWStructuredBuffer<uint> SwarmCounterBuffer;
 
 groupshared uint gsParticlesAlive;
-
 #ifdef MASTER_SIM
 groupshared float4 gsSlaveGlobalBestAndFitness;
+int numberOfSwarmsToRevive;
 #endif
 
 void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
 {
-  /*
-   - Evolutionary part nicht implementiert
-  */
+  /* -----------------------------------------------------------------------
+   * TODO List
+   * -----------------------------------------------------------------------
+   *  - Evolutionary part nicht implementiert
+   */
   
+  // Read Swarm and Particle Data from Buffers
   SwarmData swarm = SwarmBuffer[swarmBufferIndex];
   SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
+  // Get random values.
+  float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
   
-  /* ### START Update Particles life here
-   * Collision handling etc.
+  /* -----------------------------------------------------------------------
+   * Particle Health Update
+   * -----------------------------------------------------------------------
+   *  - TODO: Collision handling etc.
    */
   
   //DEBUG Only
-  if (groupIndex < 32 && particle.fitness < 20.0f)
-    particle.health = 0.0*particle.health;
-  
-  /*
-   * ### END 
-   */
+  if (particle.fitness > 50.0)
+    particle.health -= 0.001;
+  else 
+    particle.health += 0.001;
   
   bool isAlive = IsPositive(particle.health); // 1 when alive, 0 when dead
   float aliveMultiplicator = IsPositiveAsFloat(particle.health); // 1 when alive, 0 when dead
   float deadMultiplicator = IsZeroOrNegativeAsFloat(particle.health); // 0 when alive, 1 when dead
   
+  /* -----------------------------------------------------------------------
+   * Particle Velocity Update
+   * -----------------------------------------------------------------------
+   *  - TODO: Forces based due to obstacle avoidance
+   */
+  
+  // Normalize but prevent NaN
+  float3 dirToLocalBest = (particle.localBest - particle.position);
+  dirToLocalBest = any(dirToLocalBest != 0) ? normalize(dirToLocalBest) : 0;
+  float3 dirToGlobalBest = (swarm.globalBest - particle.position);
+  dirToGlobalBest = any(dirToGlobalBest != 0) ? normalize(dirToGlobalBest) : 0;
+  
 #ifdef SLAVE_SIM
-  float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
-  // Update velocity
-  particle.velocity = inertiaWeight * particle.velocity 
-    + (rand.x * c1) * (particle.localBest - particle.position) //In Richtung Local Best
-    + (rand.y * c2) * (swarm.globalBest - particle.position); //In Richtung Global best
+  particle.velocity = inertiaWeight * particle.velocity
+    + (rand.x * c1) * dirToLocalBest //In Richtung Local Best
+    + (rand.y * c2) * dirToGlobalBest; //In Richtung Global best
 #endif
 #ifdef MASTER_SIM
+  // Velocity Update of master needs the globalBest of all swarms
   if (groupIndex == 0)
   {
+    // Find best globalBest of all swarms
     float fitnessComparison = 100000000; // 3.402823466e+38F
     uint indexToBest = 0;
       //iterate slave swarms and determine globalBest 
-    for (uint i = 0; i < RWIndirectDispatchBuffer[0]; i++)
+    for (uint i = 0; i < SwarmCounterBuffer.Load(0); i++)
     {
       uint slaveSwarmBufferIndex = SwarmIndexBuffer[i];
       SwarmData slaveSwarm = SwarmBuffer[slaveSwarmBufferIndex];
@@ -118,30 +132,38 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       }
     }
     
-      //Write global Best in sharedmemory
+    //Write global Best in sharedmemory
     gsSlaveGlobalBestAndFitness.xyz = SwarmBuffer[indexToBest].globalBest;
     gsSlaveGlobalBestAndFitness.w = SwarmBuffer[indexToBest].fitness;
   }
+  GroupMemoryBarrierWithGroupSync();
   
-  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
-
-  float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
-  // Update velocity
-  particle.velocity = inertiaWeight * particle.velocity 
-    + (rand.x * c1) * (particle.localBest - particle.position)
-    + (rand.y * c2) * (swarm.globalBest - particle.position)
-    + (rand.z * c3) * (gsSlaveGlobalBestAndFitness.xyz - particle.position);
+  
+  float3 dirToSlaveGlobalBest = (gsSlaveGlobalBestAndFitness.xyz - particle.position);
+  dirToSlaveGlobalBest = any(dirToSlaveGlobalBest != 0) ? normalize(dirToSlaveGlobalBest) : 0;
+  
+  particle.velocity = inertiaWeight * particle.velocity
+    + (rand.x * c1) * dirToLocalBest
+    + (rand.y * c2) * dirToGlobalBest
+    + (rand.z * c3) * dirToSlaveGlobalBest;
 #endif
   
+  // Limit new velocity to maxVelocity and restore original sign.
+  //particle.velocity += inertVelocity;
+  //particle.velocity = sign(particle.velocity) * min(abs(particle.velocity), maxVelocity);
   // Handle Particles that are dead by multiplying their velocity with zero
   particle.velocity *= aliveMultiplicator;
   
+  /* -----------------------------------------------------------------------
+   * Particle Position Update and Boundary Correction
+   * -----------------------------------------------------------------------
+   *  - TODO: Maybe find a more non-thread-divergent solution
+   */
+  
   // Update position
-  particle.velocity = sign(particle.velocity) * min(abs(particle.velocity), maxVelocity);
   particle.position += particle.velocity;
 
   // Apply boundary corrections
-  // TODO: Make this more performant
   if (any(particle.position < worldmin))
   {
     particle.velocity = -particle.velocity * rand.x;
@@ -153,22 +175,32 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     particle.position = min(particle.position, worldmax) - rand * alpha;
   }
   
-  // Update fitness
-  // Fitness is evaluated in terms of quadratic distance to target.
+  /* -----------------------------------------------------------------------
+   * Particle Fitness and LocalBest Update
+   * -----------------------------------------------------------------------
+   *  - Fitness is evaluated in terms of distance to target.
+   */
+  
+  // If particle is dead add big handicap to fitness, so it doesn't get chosen a best.
   float3 direction = particle.position - target;
   float currentFitness = length(direction) + deadMultiplicator * 1000000;
-  //If particle is dead add big handicap to fitness, so it doesn't get chosen a best.
   
   // Save localBest and fitness, if it's a new optimal local solution
   particle.localBest = (currentFitness < particle.fitness) ? particle.position : particle.localBest;
   particle.fitness = min(particle.fitness, currentFitness);
   
-  gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
-  gsParticlesAlive = 0;
+  /* -----------------------------------------------------------------------
+   * Swarm Fitness, GlobalBest and ParticlesAlive Update
+   * -----------------------------------------------------------------------
+   *   - Utilizes GroupShared Memory to find the best solution for this swarm
+   */
   
-  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
+  gsParticlesAlive = 0; //Init ParticlesAlive to 0 (RaceCondition warning, but no problem)
+  
+  GroupMemoryBarrierWithGroupSync();
 
-  InterlockedOr(gsParticlesAlive, uint(isAlive));
+  InterlockedAdd(gsParticlesAlive, uint(isAlive)); //Count Alive Particles
   
   if (groupIndex == 0)
   {
@@ -176,7 +208,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
     swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   }
-  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  GroupMemoryBarrierWithGroupSync();
 
   //DEBUG
   //particle.position = float(particleBufferIndex) / 2048.0 * float3(100, 100, 100) * rand;
@@ -184,21 +216,64 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   //particle.position = gsSlaveGlobalBestAndFitness.xyz;
   //#endif
   
-  // Write results
-  SwarmParticleBuffer[particleBufferIndex] = particle;
+  /* -----------------------------------------------------------------------
+   * Write results back to buffer
+   * -----------------------------------------------------------------------
+   * 
+   */
   
-  if (groupIndex == 0)
+  SwarmParticleBuffer[particleBufferIndex] = particle; // Update ParticleData
+  
+  if (groupIndex == 0) //Only groupIndex 0 writes SwarmData back to buffer
   {
-    swarm.particlesAlive = (gsParticlesAlive == 1);
-    SwarmBuffer[swarmBufferIndex] = swarm; // Write result
+    swarm.particlesAlive = gsParticlesAlive;
+    SwarmBuffer[swarmBufferIndex] = swarm; // Update SwarmData
     
-    //TODO:
-    //If no particles are alive, reduce number of threadgroups by 1
-    //if particles are alive, increase number of threadgroups by 1
-    //Also update index buffer, either move this to new compute kernel or do on CPU?
-    //InterlockedAdd(RWIndirectDispatchBuffer[0], (gsParticlesAlive == 1) ? 0 : -1);
+#ifdef SLAVE_SIM
+    /* ---------------------------------------------------------------------
+     * Update IndexBuffer and InvocationCount of next frames dispatch
+     * ---------------------------------------------------------------------
+     *  - This basically removes dead SlaveSwarms from being processed.
+     */
+    
+    //If any particles are alive, increment counter to rebuild indexBuffer
+    if (swarm.particlesAlive > 0)
+    {
+      // The counterBuffers value is used as the number of threadGroupsX next simulation step.
+      uint index = SwarmCounterBuffer.IncrementCounter(); //Increments counter, index holds the pre-incremented counter value.
+      RWSwarmIndexBuffer[index] = swarmBufferIndex; // Update Index
+    }
+#endif
+    
+#ifdef MASTER_SIM
+    /* ---------------------------------------------------------------------
+     * SlaveSwarm Reactivation
+     * ---------------------------------------------------------------------
+     *  - This basically re-adds SlaveSwarms to being processsed.
+     *  - Remark: MasterSwarm Simulation is always run after Slave Simulation, so the InvocationCount representing all living swarms for next frame is available in SwarmCounterBuffer. We can now add more swarms, say reactivate them, by increasing this InvocationCount but respecting the max number of slave swarms allowed.
+     *  - Remark: MasterSwarm Simulation may be followed by a MaskedReset call which is able to heal all active swarms. By increasing the InvocationCount here and afterwards healing all active swarms, we "revive" SlaveSwarms. MasterSwarm is always processed, even if all its particles are dead.
+     *  - Remark: swarmBufferMasterIndex is equal to maxSlaveSwarmCount
+     *            The numberOfSwarmsToRevive is determined on CPU as part of the "AI" behaviour
+     *  - Warning: This is quite heavy code for GPU, but it's only done once per Swarm and frame, so we take it.
+     */
+
+    int swarmsLeftToRevive = numberOfSwarmsToRevive;
+    // Iterate all SlaveSwarms and reactive them. Reactive as much as possible, stop if we iterated all swarms or if we revived enough.
+    for (uint k = 0; (k < swarmBufferMasterIndex) && (swarmsLeftToRevive > 0); k++)
+    {
+      // Find a dead swarm
+      if (SwarmBuffer[k].particlesAlive == 0)
+      {
+        uint index = SwarmCounterBuffer.IncrementCounter();
+        RWSwarmIndexBuffer[index] = k;
+        swarmsLeftToRevive--;
+      }
+
+    }
+#endif
+    
   }
-  
+
   /*
   TODO: Add Evolutionary Part
   */
@@ -233,56 +308,72 @@ void MaskedReset(uint3 group : SV_GroupID, uint groupIndex : SV_GroupIndex, uint
   uint swarmBufferIndex = SwarmIndexBuffer[group.x];
   uint particleBufferIndex = swarmBufferIndex * SWARM_SIZE + groupIndex;
   
+  SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
   float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
-  //Initialize the population
-  SwarmParticleData particle;
+  
+  /* -----------------------------------------------------------------------
+   * Conditional Update of particle data
+   * -----------------------------------------------------------------------
+   */
+  bool particleWasRevived = false;
   if (reviveParticles)
+  {
+    // If particle was dead, set bool that is was revived
+    particleWasRevived = (SwarmParticleBuffer[particleBufferIndex].health <= 0.0);
     particle.health = MAX_HEALTH;
-  else
-    particle.health = SwarmParticleBuffer[particleBufferIndex].health;
+  }
   
-  if (enablePositionReset)
+  if (enablePositionReset && ((resetOnlyIfRevived && particleWasRevived) || !resetOnlyIfRevived))
+  {
+    //Reset position if position reset is enabled AND particle was either revived or should be reset regardless
     particle.position = resetPosition.xyz + rand * velocityVariance;
-  else
-    particle.position = SwarmParticleBuffer[particleBufferIndex].position;
-
-  if (enableVelocityReset)
-    particle.velocity = rand * velocityVariance;
-  else
-    particle.velocity = SwarmParticleBuffer[particleBufferIndex].velocity;
+  }
   
+  if (enableVelocityReset && ((resetOnlyIfRevived && particleWasRevived) || !resetOnlyIfRevived))
+  {
+    //Reset velocity if velocity reset is enabled AND particle was either revived or should be reset regardless
+    particle.velocity = rand * velocityVariance;
+  }
   
   float aliveMultiplicator = IsPositiveAsFloat(particle.health); // 1 when alive, 0 when dead
   float deadMultiplicator = IsZeroOrNegativeAsFloat(particle.health); // 0 when alive, 1 when dead
 
-  //Init fitness
+  /* -----------------------------------------------------------------------
+   * Update/Init particle fitness
+   * -----------------------------------------------------------------------
+   */
   float3 direction = particle.position - target;
   float currentFitness = length(direction) + deadMultiplicator * 1000000;
   particle.localBest = particle.position;
   particle.fitness = currentFitness;
 
-  // Write results
-  SwarmParticleBuffer[particleBufferIndex] = particle;
-  
+  /* -----------------------------------------------------------------------
+   * Swarm Fitness, GlobalBest and ParticlesAlive Update
+   * -----------------------------------------------------------------------
+   */
   gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
   
-  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  GroupMemoryBarrierWithGroupSync();
 
   if (groupIndex == 0)
   {
-    SwarmData swarm;
-    
-    if (reviveParticles)
-      swarm.particlesAlive = true;
-    else
-      swarm.particlesAlive = SwarmBuffer[swarmBufferIndex].particlesAlive;
+    SwarmData swarm = SwarmBuffer[swarmBufferIndex];
     
     uint indexToBest = GetGSLocalBestIndex();
     swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
     swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
     
+    // Update particles alive
+    if (reviveParticles)
+      swarm.particlesAlive = SWARM_SIZE;
+    
     SwarmBuffer[swarmBufferIndex] = swarm; // Write result
   }
-
+  
+  /* -----------------------------------------------------------------------
+   * Write particleData back to buffer
+   * -----------------------------------------------------------------------
+   */
+  SwarmParticleBuffer[particleBufferIndex] = particle;
 }
 #endif

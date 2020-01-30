@@ -13,7 +13,7 @@ cbuffer SwarmResetUniforms
   bool enablePositionReset;
   bool enableVelocityReset;
   bool reviveParticles;
-  // +4Byte
+  bool resetOnlyIfRevived; //Only reset pos and velocity if particle actually gets revived (health of particle was 0)
   //------------------------------------------- 16byte Boundary
 }
 #endif

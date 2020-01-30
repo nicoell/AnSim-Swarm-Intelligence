@@ -14,7 +14,7 @@ struct SwarmData
 {
   float3 globalBest; //best solution of all particles in a swarm
   float fitness; //rating of the globalBest
-  int particlesAlive;
+  uint particlesAlive;
   //float2 rand;
 };
 
