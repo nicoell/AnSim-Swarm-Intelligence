@@ -7,7 +7,7 @@
 // Prevents graying out unknown preprocessor macros
 #if defined(__INTELLISENSE__)
   #define SETUP_ONLY
-  #define SLAVE_SIM 
+  //#define SLAVE_SIM 
   #define MASTER_SIM
   #define SLAVE_OR_MASTER
 #endif
@@ -86,10 +86,10 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   //DEBUG Only
-  if (particle.fitness > 50.0)
-    particle.health -= 0.001;
+  if (particle.fitness > 500.0)
+    particle.health -= 0.0005;
   else 
-    particle.health += 0.001;
+    particle.health += 0.0005;
   
   bool isAlive = IsPositive(particle.health); // 1 when alive, 0 when dead
   float aliveMultiplicator = IsPositiveAsFloat(particle.health); // 1 when alive, 0 when dead
@@ -119,12 +119,13 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     // Find best globalBest of all swarms
     float fitnessComparison = 100000000; // 3.402823466e+38F
     uint indexToBest = 0;
-      //iterate slave swarms and determine globalBest 
+    //iterate slave swarms and determine globalBest 
     for (uint i = 0; i < SwarmCounterBuffer.Load(0); i++)
     {
       uint slaveSwarmBufferIndex = SwarmIndexBuffer[i];
       SwarmData slaveSwarm = SwarmBuffer[slaveSwarmBufferIndex];
       
+      //Check if swarm is alive and compare fitness
       if (IsPositive(slaveSwarm.particlesAlive) && slaveSwarm.fitness < fitnessComparison)
       {
         indexToBest = slaveSwarmBufferIndex;
@@ -138,7 +139,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   }
   GroupMemoryBarrierWithGroupSync();
   
-  
+  // Normalize but prevent NaN
   float3 dirToSlaveGlobalBest = (gsSlaveGlobalBestAndFitness.xyz - particle.position);
   dirToSlaveGlobalBest = any(dirToSlaveGlobalBest != 0) ? normalize(dirToSlaveGlobalBest) : 0;
   
