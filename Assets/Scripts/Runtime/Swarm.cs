@@ -169,12 +169,6 @@ namespace AnSim.Runtime
       _swarmResetUniformBufferNameId = Shader.PropertyToID("SwarmResetUniforms");
       _swarmResetUniformBuffer = new ComputeBuffer(1, _swarmResetUniformsSize, ComputeBufferType.Constant);
 
-      /*TODO:
-       Add Readback Async GPU Buffer
-       Adjust index buffer either on cpu (after some readback) or in new compute kernel
-       Implement Respawn/Grow system using ResetSwarmWithMask
-       */
-
       //Init Swarm Buffer
       _swarmBufferNameId =
         Shader.PropertyToID("SwarmBuffer");
@@ -434,7 +428,7 @@ namespace AnSim.Runtime
       Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
 
       //Update and Set IndexMaskBuffer
-      simulationShader.SetBuffer(csKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Pong]);
+      simulationShader.SetBuffer(csKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Pong]); //Important: Uses Pong Buffer, which was updated during this frame!
 
       //Set Swarm Buffers
       simulationShader.SetBuffer(csKernelData.index, _swarmBufferNameId, _swarmBuffer);
@@ -473,7 +467,7 @@ namespace AnSim.Runtime
             if (swarm.fitness < 5.5f)
             {
               _numberOfSwarmsToRevive += foodSource.EatFood();
-              Debug.Log("Mark all swarms to revive");
+              Debug.Log("Swarm ate "+_numberOfSwarmsToRevive+" food.");
             }
 
           }
