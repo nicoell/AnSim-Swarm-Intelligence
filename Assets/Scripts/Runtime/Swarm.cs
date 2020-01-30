@@ -297,6 +297,8 @@ namespace AnSim.Runtime
       _slaveSwarmUniforms[0].n = replicatesPerParticle;
       _slaveSwarmUniforms[0].target = targetTransform.position;
       _slaveSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
+      _slaveSwarmUniforms[0].sigma = mutationStrategyParameter;
+      _slaveSwarmUniforms[0].sigma_g = globalBestDisturbanceConstant;
       //Update Uniform Buffer
       _slaveSwarmUniformBuffer.SetData(_slaveSwarmUniforms);
 
@@ -325,6 +327,9 @@ namespace AnSim.Runtime
 
       _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
       _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = 2048;//(uint)GetMaxSlaveSwarmParticleCount();
+
+      _masterSwarmUniforms[0].sigma = mutationStrategyParameter;
+      _masterSwarmUniforms[0].sigma_g = globalBestDisturbanceConstant;
 
       //Update Uniform Buffer
       _masterSwarmUniformBuffer.SetData(_masterSwarmUniforms);
