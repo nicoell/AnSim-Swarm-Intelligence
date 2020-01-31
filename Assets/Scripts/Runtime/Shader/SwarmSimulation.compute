@@ -151,6 +151,19 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     particle.position = min(particle.position, worldmax) - rand * alpha;
   }
   
+  float collisionMalus = 0;
+  //Debug collision
+  float3 worldcenter = worldmin + worldmax * 0.5;
+  float3 posToCenter = particle.position - worldcenter;
+  float distanceToCenter = length(posToCenter);
+  collisionMalus = clamp(50 - distanceToCenter, 0, 50);
+  if (distanceToCenter < 50)
+  {
+    float3 normal = normalize(posToCenter);
+    particle.velocity = reflect(particle.velocity, normal);
+    particle.position = worldcenter + normal * (distanceToCenter + 1);
+  }
+  
   /* -----------------------------------------------------------------------
    * Particle Fitness and LocalBest Update
    * -----------------------------------------------------------------------
@@ -159,7 +172,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   
   // If particle is dead add big handicap to fitness, so it doesn't get chosen a best.
   float3 direction = particle.position - target;
-  float currentFitness = length(direction) + deadMultiplicator * 1000000;
+  float currentFitness = length(direction) + collisionMalus + deadMultiplicator * 1000000;
   
   // Save localBest and fitness, if it's a new optimal local solution
   particle.localBest = (currentFitness < particle.fitness) ? particle.position : particle.localBest;
@@ -255,10 +268,24 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
         replica.velocity = -replica.velocity * rand_mutation.x;
         replica.position = min(replica.position, worldmax) - rand_mutation * alpha;
       }
+      
+      //Debug collision
+      float collisionMalus = 0;
+      float3 worldcenter = worldmin + worldmax * 0.5;
+      float3 posToCenter = replica.position - worldcenter;
+      float distanceToCenter = length(posToCenter);
+      collisionMalus = clamp(50 - distanceToCenter, 0, 50);
+      if (distanceToCenter < 50)
+      {
+        float3 normal = normalize(posToCenter);
+        replica.velocity = reflect(replica.velocity, normal);
+        replica.position = worldcenter + normal * (distanceToCenter + 1);
+      }
+      
   
       // Update fitness
       // Fitness is evaluated in terms of quadratic distance to target.
-      float currentFitness = length(replica.position - target);
+      float currentFitness = length(replica.position - target) + collisionMalus;
   
       // Save localBest and fitness, if it's a new optimal local solution
       replica.localBest = (currentFitness < replica.fitness) ? replica.position : replica.localBest;
@@ -273,9 +300,10 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     // Update original particles local best with the best replica
     particle.localBest = (best_replica.fitness < particle.fitness) ? best_replica.localBest : particle.localBest;
     particle.fitness = min(particle.fitness, best_replica.fitness);
-  
+    
     gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
   }
+  
     //TODO: Sinnvoll mit if(isAlive)? Hier muss sowieso auf alle Threads gewartet werden für global best. Sync muss auch außerhalb von if() liegen,
     //da es sonst eventuell nicht erreicht wird von Threads
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();

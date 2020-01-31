@@ -144,12 +144,17 @@ namespace AnSim.Runtime
      * TODO: Prevent position be to be inside environment.
      */
     public Vector3 GetValidFoodPosition()
-    {
-      var foodPos = new Vector3(
-        Random.Range(_simulationBounds.min.x, _simulationBounds.max.x),
-        Random.Range(_simulationBounds.min.y, _simulationBounds.max.y),
-        Random.Range(_simulationBounds.min.z, _simulationBounds.max.z)
-      );
+    { 
+      Vector3 foodPos;
+      do
+      {
+        foodPos = new Vector3(
+          Random.Range(_simulationBounds.min.x, _simulationBounds.max.x),
+          Random.Range(_simulationBounds.min.y, _simulationBounds.max.y),
+          Random.Range(_simulationBounds.min.z, _simulationBounds.max.z)
+        );
+      } while ((foodPos - _simulationBounds.center).magnitude < 50);
+
       return foodPos;
     }
 
