@@ -239,7 +239,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
                 replica.velocity = -replica.velocity * rand_mutation.x;
                 replica.position = max(replica.position, worldmin) + rand_mutation * alpha;
             }
-            
+            if (any(replica.position > worldmax))
             {
                 replica.velocity = -replica.velocity * rand_mutation.x;
                 replica.position = min(replica.position, worldmax) - rand_mutation * alpha;
@@ -254,9 +254,12 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
             replica.fitness = min(replica.fitness, currentFitness);
             
             //If we have a new best replica we save it
-            best_replica = (replica.fitness < best_replica.fitness) ? replica : best_replica;
+            if (replica.fitness < best_replica.fitness)
+            {
+                best_replica = replica;
+            }
         }
-         // Update original particles local best with the best replica
+        // Update original particles local best with the best replica
         particle.localBest = (best_replica.fitness < particle.fitness) ? best_replica.localBest : particle.localBest;
         particle.fitness = min(particle.fitness, best_replica.fitness);
   
