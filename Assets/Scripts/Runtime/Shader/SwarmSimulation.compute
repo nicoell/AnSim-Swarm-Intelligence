@@ -20,6 +20,13 @@
 #include "Definitions/SharedInputs.hlsl"
 #include "Definitions/SimulationInputs.hlsl"
 
+// Forward declaration of functions, put them at end of file
+uint GetGSLocalBestIndex();
+float IsPositiveAsFloat(float x);
+float IsZeroOrNegativeAsFloat(float x);
+bool IsPositive(float x);
+float NormDist_0_1(float u1, float u2);
+
 StructuredBuffer<uint> SwarmIndexBuffer;
 RWStructuredBuffer<SwarmData> SwarmBuffer;
 RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
@@ -27,46 +34,13 @@ RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
 // Shared Memory
 groupshared float4 gsLocalBestAndFitness[SWARM_SIZE];
 
-inline uint GetGSLocalBestIndex()
-{
-  uint indexToBest = 0;
-  float fitnessComparison = 100000000; // 3.402823466e+38F
-  for (uint i = 0; i < SWARM_SIZE; i++)
-  {
-    if (gsLocalBestAndFitness[i].w < fitnessComparison)
-    {
-      indexToBest = i;
-      fitnessComparison = gsLocalBestAndFitness[i].w;
-    }
-  }
-  return indexToBest;
-}
-
-inline float IsPositiveAsFloat(float x)
-{
-  return (float) (x > 0);
-}
-inline float IsZeroOrNegativeAsFloat(float x)
-{
-  return (float) (x <= 0);
-}
-inline bool IsPositive(float x)
-{
-  return (x > 0);
-}
-
-//Returns a random normal distributed (mean 0, stdev 1) variable via Box-Muller-Transformation
-//u1 and u2 should be uniform(0,1] random
-inline float NormDist_0_1(float u1, float u2)
-{
-  return sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265f * u2);
-}
-
 #ifdef SLAVE_OR_MASTER
 RWStructuredBuffer<uint> RWSwarmIndexBuffer;
 RWStructuredBuffer<uint> SwarmCounterBuffer;
 
+groupshared uint gsIndexToGlobalBest;
 groupshared uint gsParticlesAlive;
+
 #ifdef MASTER_SIM
 groupshared float4 gsSlaveGlobalBestAndFitness;
 int numberOfSwarmsToRevive;
@@ -207,17 +181,13 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   if (groupIndex == 0)
   {
     uint indexToBest = GetGSLocalBestIndex();
-    swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
-    swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
+    // Only save index to SharedMemory global Best so everyone can use it.
+    // Writing results back to swarm Struct is only visible for groupIndex = 0
+    gsIndexToGlobalBest = indexToBest; 
+    //swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
+    //swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   }
   GroupMemoryBarrierWithGroupSync();
-
-  //DEBUG
-  //particle.position = float(particleBufferIndex) / 2048.0 * float3(100, 100, 100) * rand;
-  //#ifdef MASTER_SIM
-  //particle.position = gsSlaveGlobalBestAndFitness.xyz;
-  //#endif
-  
     
   /* -----------------------------------------------------------------------
    * Evolutionary Part 
@@ -244,7 +214,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       float mw = inertiaWeight + (1 + sigma * NormDist_0_1(rand_mw.x, rand_mw.y)); // Equation 7
       float mc1 = c1 + (1 + sigma * NormDist_0_1(rand_mc.x, rand_mc.y));; // Equation 8
       float mc2 = c2 + (1 + sigma * NormDist_0_1(rand_mc.z, rand_mc.w));; // Equation 9
-      float3 mbg = swarm.globalBest + (1 + sigma_g * NormDist_0_1(rand_mbg.x, rand_mbg.y));; // Equation 10. mutation global best
+      float3 mbg = gsLocalBestAndFitness[gsIndexToGlobalBest].xyz + (1 + sigma_g * NormDist_0_1(rand_mbg.x, rand_mbg.y));; // Equation 10. mutation global best
         
       // Normalize but prevent NaN
       float3 dirToLocalBest = (replica.localBest - replica.position);
@@ -309,6 +279,12 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     //TODO: Sinnvoll mit if(isAlive)? Hier muss sowieso auf alle Threads gewartet werden für global best. Sync muss auch außerhalb von if() liegen,
     //da es sonst eventuell nicht erreicht wird von Threads
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+
+  /* -----------------------------------------------------------------------
+   * Write results back to buffer
+   * -----------------------------------------------------------------------
+   * 
+   */
   
   if (groupIndex == 0)//update global best of swarm
   {
@@ -316,12 +292,6 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
     swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   }
-    
-  /* -----------------------------------------------------------------------
-   * Write results back to buffer
-   * -----------------------------------------------------------------------
-   * 
-   */
   
   SwarmParticleBuffer[particleBufferIndex] = particle; // Update ParticleData
   
@@ -474,3 +444,44 @@ void MaskedReset(uint3 group : SV_GroupID, uint groupIndex : SV_GroupIndex, uint
   SwarmParticleBuffer[particleBufferIndex] = particle;
 }
 #endif
+
+
+/* -----------------------------------------------------------------------
+ * Function declarations
+ * -----------------------------------------------------------------------
+ */
+inline uint GetGSLocalBestIndex()
+{
+  uint indexToBest = 0;
+  float fitnessComparison = 100000000; // 3.402823466e+38F
+  for (uint i = 0; i < SWARM_SIZE; i++)
+  {
+    if (gsLocalBestAndFitness[i].w < fitnessComparison)
+    {
+      indexToBest = i;
+      fitnessComparison = gsLocalBestAndFitness[i].w;
+    }
+  }
+  return indexToBest;
+}
+
+inline float IsPositiveAsFloat(float x)
+{
+  return (float) (x > 0);
+}
+inline float IsZeroOrNegativeAsFloat(float x)
+{
+  return (float) (x <= 0);
+}
+inline bool IsPositive(float x)
+{
+  return (x > 0);
+}
+
+//Returns a random normal distributed (mean 0, stdev 1) variable via Box-Muller-Transformation
+//u1 and u2 should be uniform(0,1] random
+inline float NormDist_0_1(float u1, float u2)
+{
+  return sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265f * u2);
+}
+
