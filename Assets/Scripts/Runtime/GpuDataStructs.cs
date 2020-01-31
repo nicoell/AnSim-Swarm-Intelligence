@@ -44,16 +44,14 @@ namespace AnSim.Runtime
     public uint swarmParticleBufferMasterOffset; //Index of SwarmBuffer to Master Swarm
     [FieldOffset(52)]
     public uint swarmBufferMasterIndex; //Index of SwarmBuffer to Master Swarm
-    //[FieldOffset(56)]
-    //public uint p1;
-    //[FieldOffset(60)]
-    //public uint p2;
-    // +4Byte
-    // +4Byte
+    [FieldOffset(56)]
+    public float sigma; // mutation strategy parameter for inertia and acceleration mutation
+    [FieldOffset(60)]
+    public float sigma_g; // disturbance constant to the global best mutation
     //------------------------------------------- 16byte Boundary
   }
 
-  [StructLayout(LayoutKind.Explicit, Size = 48)]
+  [StructLayout(LayoutKind.Explicit, Size = 64)]
   public struct SlaveSwarmUniforms
   {
     [FieldOffset(0)]
@@ -72,6 +70,13 @@ namespace AnSim.Runtime
     //------------------------------------------- 16byte Boundary
     [FieldOffset(32)]
     public Vector3 maxVelocity;
+    [FieldOffset(44)]
+    public float sigma;
+    //------------------------------------------- 16byte Boundary
+    [FieldOffset(48)]
+    public float sigma_g;
+    // +4Byte
+    // +4Byte
     // +4Byte
     //------------------------------------------- 16byte Boundary
   }

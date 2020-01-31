@@ -30,6 +30,11 @@ cbuffer SlaveSwarmUniforms
   float inertiaWeight; // linearly descreases every iteration
   //------------------------------------------- 16byte Boundary
   float3 maxVelocity;
+  float sigma; // [mutationStrategyParameter] for inertia and acceleration mutation
+  //------------------------------------------- 16byte Boundary
+  float sigma_g; // [globalBestDisturbanceConstant] disturbance constant to the global best
+  // +4Byte
+  // +4Byte
   // +4Byte
   //------------------------------------------- 16byte Boundary
 };
@@ -50,11 +55,9 @@ cbuffer MasterSwarmUniforms
   float3 maxVelocity; // Best global value obtained by the slave swarms
   //------------------------------------------- 16byte Boundary
   uint swarmParticleBufferMasterOffset; //Index to first Master Swarm Particle in SwarmParticleBuffer
-  uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer 
-  uint p1; //Index to first Master Swarm Particle in SwarmParticleBuffer
-  uint p2; //Index to first Master Swarm Particle in SwarmParticleBuffer
-  // +4Byte
-  // +4Byte
+  uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer   
+  float sigma; // [mutationStrategyParameter] for inertia and acceleration mutation
+  float sigma_g; // [globalBestDisturbanceConstant] disturbance constant to the global best
   //------------------------------------------- 16byte Boundary
 };
 #endif

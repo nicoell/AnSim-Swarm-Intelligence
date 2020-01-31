@@ -55,6 +55,13 @@ inline bool IsPositive(float x)
   return (x > 0);
 }
 
+//Returns a random normal distributed (mean 0, stdev 1) variable via Box-Muller-Transformation
+//u1 and u2 should be uniform(0,1] random
+inline float NormDist_0_1(float u1, float u2)
+{
+  return sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265f * u2);
+}
+
 #ifdef SLAVE_OR_MASTER
 RWStructuredBuffer<uint> RWSwarmIndexBuffer;
 RWStructuredBuffer<uint> SwarmCounterBuffer;
@@ -67,12 +74,6 @@ int numberOfSwarmsToRevive;
 
 void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
 {
-  /* -----------------------------------------------------------------------
-   * TODO List
-   * -----------------------------------------------------------------------
-   *  - Evolutionary part nicht implementiert
-   */
-  
   // Read Swarm and Particle Data from Buffers
   SwarmData swarm = SwarmBuffer[swarmBufferIndex];
   SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
@@ -88,7 +89,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   //DEBUG Only
   if (particle.fitness > 500.0)
     particle.health -= 0.0005;
-  else 
+  else
     particle.health += 0.0005;
   
   bool isAlive = IsPositive(particle.health); // 1 when alive, 0 when dead
@@ -217,6 +218,105 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   //particle.position = gsSlaveGlobalBestAndFitness.xyz;
   //#endif
   
+    
+  /* -----------------------------------------------------------------------
+   * Evolutionary Part 
+   * -----------------------------------------------------------------------
+   *   - Replicates original particle N times and mutates each replica to find
+   *     a better local best for original particle
+   *   - Uses the in this iteration already updated swarms global best and particles local best
+   */
+  
+  if (isAlive)// Only create replicas if current particle isnt dead
+  {
+    //Replicate current particle N times and select its best replica
+    SwarmParticleData best_replica = particle;
+    for (uint i = 0; i < n; i++)
+    {
+      SwarmParticleData replica = particle;
+      //create random variables [0,1] for all mutations and velocity equations
+      float4 rand_mc = hash43(float3(particleBufferIndex, timeSinceStart, i + 0.6f));
+      float2 rand_mw = hash22(float2(rand_mc.x, timeSinceStart));
+      float2 rand_mbg = hash23(float3(rand_mc.yz, i + 1.22f));
+      float3 rand_mutation = hash33(float3(rand_mbg, i + 23.2f));
+        
+      //calculate mutations
+      float mw = inertiaWeight + (1 + sigma * NormDist_0_1(rand_mw.x, rand_mw.y)); // Equation 7
+      float mc1 = c1 + (1 + sigma * NormDist_0_1(rand_mc.x, rand_mc.y));; // Equation 8
+      float mc2 = c2 + (1 + sigma * NormDist_0_1(rand_mc.z, rand_mc.w));; // Equation 9
+      float3 mbg = swarm.globalBest + (1 + sigma_g * NormDist_0_1(rand_mbg.x, rand_mbg.y));; // Equation 10. mutation global best
+        
+      // Normalize but prevent NaN
+      float3 dirToLocalBest = (replica.localBest - replica.position);
+      dirToLocalBest = any(dirToLocalBest != 0) ? normalize(dirToLocalBest) : 0;
+      float3 dirToGlobalBest = (mbg - replica.position);
+      dirToGlobalBest = any(dirToGlobalBest != 0) ? normalize(dirToGlobalBest) : 0;
+#ifdef SLAVE_SIM
+            //update velocity slave swarm. Equation 11
+            replica.velocity = mw * replica.velocity 
+            + (rand_mutation.x * mc1) * dirToLocalBest
+            + (rand_mutation.y * mc2) * dirToGlobalBest;
+#endif        
+#ifdef MASTER_SIM
+      float2 rand_mc3 = hash22(float2(particleBufferIndex, rand_mc.w));
+      float mc3 = c3 + (1 + sigma * NormDist_0_1(rand_mc3.x, rand_mc3.y));; // Equation 14
+        
+      // Normalize but prevent NaN
+      float3 dirToSlaveGlobalBest = (gsSlaveGlobalBestAndFitness.xyz - replica.position);
+      dirToSlaveGlobalBest = any(dirToSlaveGlobalBest != 0) ? normalize(dirToSlaveGlobalBest) : 0;
+      
+      // Update velocity master swarm. Equation 12
+      replica.velocity = mw * replica.velocity 
+            + (rand_mutation.x * mc1) * dirToLocalBest
+            + (rand_mutation.y * mc2) * dirToGlobalBest
+            + (rand_mutation.z * mc3) * dirToSlaveGlobalBest;
+#endif            
+      // Update position. Equation 2
+      replica.position += replica.velocity;
+        
+      // Apply boundary corrections. Equation 4 & 5
+      if (any(replica.position < worldmin))
+      {
+        replica.velocity = -replica.velocity * rand_mutation.x;
+        replica.position = max(replica.position, worldmin) + rand_mutation * alpha;
+      }
+      if (any(replica.position > worldmax))
+      {
+        replica.velocity = -replica.velocity * rand_mutation.x;
+        replica.position = min(replica.position, worldmax) - rand_mutation * alpha;
+      }
+  
+      // Update fitness
+      // Fitness is evaluated in terms of quadratic distance to target.
+      float currentFitness = length(replica.position - target);
+  
+      // Save localBest and fitness, if it's a new optimal local solution
+      replica.localBest = (currentFitness < replica.fitness) ? replica.position : replica.localBest;
+      replica.fitness = min(replica.fitness, currentFitness);
+            
+      //If we have a new best replica we save it
+      if (replica.fitness < best_replica.fitness)
+      {
+        best_replica = replica;
+      }
+    }
+    // Update original particles local best with the best replica
+    particle.localBest = (best_replica.fitness < particle.fitness) ? best_replica.localBest : particle.localBest;
+    particle.fitness = min(particle.fitness, best_replica.fitness);
+  
+    gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
+  }
+    //TODO: Sinnvoll mit if(isAlive)? Hier muss sowieso auf alle Threads gewartet werden für global best. Sync muss auch außerhalb von if() liegen,
+    //da es sonst eventuell nicht erreicht wird von Threads
+  GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  
+  if (groupIndex == 0)//update global best of swarm
+  {
+    uint indexToBest = GetGSLocalBestIndex();
+    swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
+    swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
+  }
+    
   /* -----------------------------------------------------------------------
    * Write results back to buffer
    * -----------------------------------------------------------------------
@@ -274,10 +374,6 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
 #endif
     
   }
-
-  /*
-  TODO: Add Evolutionary Part
-  */
 }
 #endif
 
