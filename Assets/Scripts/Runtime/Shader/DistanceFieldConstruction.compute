@@ -1,0 +1,68 @@
+﻿#pragma kernel CSMain
+
+#include "Definitions/DistanceFieldVolumeSize.hlsl"
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+StructuredBuffer<float> DynamicDepthBuffer;
+StructuredBuffer<uint> PrefixSumBuffer;
+
+RWTexture3D<float> DistanceFieldTexture;
+
+float4x4 gridModelViewProj[3];
+
+int pixelCount;
+int volumeResolution; // volume = viewport = grid resolutiob
+
+[numthreads(VOLUME_RESOLUTION, 1, 1)]
+void CSMain(uint3 gridPointId : SV_DispatchThreadID)
+{
+  float4 centeredPos = float4(gridPointId, 1) + float4(0.5, 0.5, 0.5, 0);
+  
+  uint baseIndex = 0;
+  int majorityVote = 0;
+  float depthApproximation = 1.0;
+  
+  float debug = -10;
+  
+  [unroll]
+  for (uint i = 0; i < 3; i++)
+  {
+    float3 projectedPos = mul(gridModelViewProj[i], centeredPos).xyz;
+    
+    
+    projectedPos.xy = projectedPos.xy * 0.5f + 0.5f; //Bring to 0..1 range
+    projectedPos.xy *= volumeResolution; //And to 0..VolumeResolution Range
+    
+    debug = projectedPos.y;
+    
+    uint projectedPixelIndex = baseIndex + uint(projectedPos.y) * volumeResolution + uint(projectedPos.x);
+    uint dynamicIndexStart = (projectedPixelIndex == 0) ? 0 : PrefixSumBuffer[projectedPixelIndex - 1];
+    uint dynamicIndexEnd = PrefixSumBuffer[projectedPixelIndex];
+
+    bool isIn = false;
+    for (uint k = dynamicIndexStart; k < dynamicIndexEnd; k++)
+    {
+      float depth = DynamicDepthBuffer[k];
+      
+      if (depth < projectedPos.z)
+      {
+        isIn = !isIn;
+      }
+      depthApproximation = min(abs(projectedPos.z - depth), depthApproximation);
+    }
+    //Only vote wehen number of samples is even
+    //if ((dynamicIndexEnd - dynamicIndexStart) % 2 == 0)
+    {
+      majorityVote += isIn ? 1 : -1;
+    }
+    baseIndex += pixelCount;
+    
+    
+  }
+  //Convert depth approximation to signed depth depending on majority Vote
+  depthApproximation = (majorityVote > 0) ? depthApproximation : -1.0 * depthApproximation;
+  
+  //DistanceFieldTexture[gridPointId] = depthApproximation;
+  DistanceFieldTexture[gridPointId] = depthApproximation;
+}

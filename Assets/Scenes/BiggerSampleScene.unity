@@ -168,6 +168,7 @@ MonoBehaviour:
   maxVelocity: 1
   asyncGpuRequestInterval: 0.2
   maxGpuRequestQueueLength: 2
+  worldDodgeBias: 10
   particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   subMeshIndex: 0
   particleTint: {r: 0, g: 0, b: 1, a: 1}
@@ -185,43 +186,27 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &350759235
-MonoBehaviour:
+--- !u!21 &475170347
+Material:
+  serializedVersion: 6
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c06aaec03025c554a9e16b5ec30b38a9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  shaders:
-    swarmSimulationComputeShader: {fileID: 7200000, guid: abee205e697b91c46b7d2bc0b860ef18,
-      type: 3}
-    swarmSimulationMaskedResetKernelData:
-      index: 0
-      name: 
-      numThreadsX: 0
-      numThreadsY: 0
-      numThreadsZ: 0
-    swarmSimulationSlaveUpdateKernelData:
-      index: 1
-      name: SlaveUpdate
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    swarmSimulationMasterUpdateKernelData:
-      index: 2
-      name: MasterUpdate
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    swarmRenderingShader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a,
-      type: 3}
-  materials:
-    swarmRenderMaterial: {fileID: 1639598838}
+  m_Name: Custom/FragmentCounting
+  m_Shader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
 --- !u!1 &574809908
 GameObject:
   m_ObjectHideFlags: 0
@@ -270,6 +255,7 @@ MonoBehaviour:
   maxVelocity: 1
   asyncGpuRequestInterval: 0.2
   maxGpuRequestQueueLength: 2
+  worldDodgeBias: 10
   particleMesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
   subMeshIndex: 0
   particleTint: {r: 1, g: 0, b: 0, a: 1}
@@ -287,6 +273,27 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!21 &667869131
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Custom/DynamicDepthBufferConstruction
+  m_Shader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -360,7 +367,7 @@ Light:
   m_BounceIntensity: 1
   m_ColorTemperature: 6570
   m_UseColorTemperature: 0
-  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_BoundingSphereOverride: {x: 0, y: -1.2197928e-12, z: -1.2197928e-12, w: -1.2197928e-12}
   m_UseBoundingSphereOverride: 0
   m_ShadowRadius: 0
   m_ShadowAngle: 0
@@ -407,8 +414,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db5ec4bb7c9fba247b358dc81fbfb43c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  simulationResources: {fileID: 350759235}
-  maxSwarmCount: 8
+  simulationResources: {fileID: 1103388523}
+  updateEveryFrame: 0
 --- !u!4 &852724879
 Transform:
   m_ObjectHideFlags: 0
@@ -506,7 +513,91 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!21 &1639598838
+--- !u!114 &1103388523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c06aaec03025c554a9e16b5ec30b38a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shaders:
+    swarmSimulationComputeShader: {fileID: 7200000, guid: abee205e697b91c46b7d2bc0b860ef18,
+      type: 3}
+    swarmSimulationMaskedResetKernelData:
+      index: 0
+      name: MaskedReset
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmSimulationSlaveUpdateKernelData:
+      index: 1
+      name: SlaveUpdate
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmSimulationMasterUpdateKernelData:
+      index: 2
+      name: MasterUpdate
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmRenderingShader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a,
+      type: 3}
+    fragmentCountingShader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad,
+      type: 3}
+    dynamicDepthBufferConstructionShader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c,
+      type: 3}
+    distanceFieldConstructionComputeShader: {fileID: 7200000, guid: 89f562db77bfa254fb83d6d1670f263e,
+      type: 3}
+    prefixSumCompute: {fileID: 7200000, guid: e55887909730bd74f9ddf3a52987997a, type: 3}
+    clearBufferUintComputeShader: {fileID: 7200000, guid: e69288c5a5faef443b300c1dc66f682f,
+      type: 3}
+    prefixSumScanInBucketInclusive:
+      index: 0
+      name: ScanInBucketInclusive
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanInBucketExclusive:
+      index: 1
+      name: ScanInBucketExclusive
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanBucketResult:
+      index: 2
+      name: ScanBucketResult
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanAddBucketResult:
+      index: 3
+      name: ScanAddBucketResult
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    distanceFieldConstructionKernelData:
+      index: 0
+      name: CSMain
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    clearBufferUintKernelData:
+      index: 0
+      name: Clear
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+  materials:
+    swarmRenderMaterial: {fileID: 1103683232}
+    fragmentCountingMaterial: {fileID: 475170347}
+    dynamicDepthBufferConstructionMaterial: {fileID: 667869131}
+--- !u!21 &1103683232
 Material:
   serializedVersion: 6
   m_ObjectHideFlags: 0
@@ -541,7 +632,7 @@ GameObject:
   - component: {fileID: 1738989244}
   m_Layer: 0
   m_Name: Food
-  m_TagString: Untagged
+  m_TagString: DistanceFieldInput
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -669,6 +760,7 @@ MonoBehaviour:
   maxVelocity: 1
   asyncGpuRequestInterval: 0.2
   maxGpuRequestQueueLength: 2
+  worldDodgeBias: 10
   particleMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   subMeshIndex: 0
   particleTint: {r: 0, g: 1, b: 0, a: 1}

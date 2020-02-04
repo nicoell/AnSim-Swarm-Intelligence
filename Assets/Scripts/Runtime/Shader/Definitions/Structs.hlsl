@@ -18,5 +18,9 @@ struct SwarmData
   //float2 rand;
 };
 
+struct DistanceFieldObjectMatrices
+{
+  float4x4 matrices[3];
+};
 
 #endif  // STRUCTS_INCLUDED

@@ -12,14 +12,15 @@ namespace AnSim.Runtime
   {
     [Header("Resource Management")]
     public SimulationResources simulationResources;
-    
-    [Header("Simulation Settings")]
-    [Range(1, 32)]
-    public uint maxSwarmCount = 8;
 
-    private Bounds _simulationBounds;
+    [Header("DistanceFieldVolume")] 
+    public bool updateEveryFrame = false;
+    
+    private DistanceFieldVolume _distanceFieldVolume;
+    private readonly int _distanceFieldTextureNameId = Shader.PropertyToID("DistanceFieldTexture");
 
     private List<Swarm> _swarms;
+    private Bounds _simulationBounds;
 
     private int _swarmSimulationUniformBufferNameId;
     private ComputeBuffer _swarmSimulationUniformBuffer;
@@ -29,6 +30,10 @@ namespace AnSim.Runtime
     private void Awake()
     {
       _swarms = new List<Swarm>(); //Init Swarm list
+
+      _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale);
+
+      _distanceFieldVolume = new DistanceFieldVolume(simulationResources, _simulationBounds);
 
       // Init SwarmSimulationUniform Buffer and data
       _swarmSimulationUniformsSize =
@@ -41,6 +46,16 @@ namespace AnSim.Runtime
 
     private void Start()
     {
+      _distanceFieldVolume.SetupPipeline();
+      // Set necessary resources to simulation compute shader + kernels
+      simulationResources.shaders.swarmSimulationComputeShader.SetMatrix("OrthoProjMatrix", _distanceFieldVolume.OrthoProjectionMatrix);
+      simulationResources.shaders.swarmSimulationComputeShader.SetInt("VolumeResolution", _distanceFieldVolume.VolumeResolution);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMaskedResetKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
+
+      _distanceFieldVolume.ExecutePipeline();
+
       #region Init all Swarms
       //Update global Swarm Simulation Uniforms
       _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
@@ -49,9 +64,8 @@ namespace AnSim.Runtime
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
 
-      _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale);
-
       Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
+
 
       foreach (var swarm in _swarms)
       {
@@ -62,7 +76,14 @@ namespace AnSim.Runtime
 
     private void Update()
     {
-      #region Update all Swarms
+      if (updateEveryFrame)
+      {
+        //_distanceFieldVolume.SetupPipeline();
+        _distanceFieldVolume.UpdateDistanceFieldObjectsData();
+        _distanceFieldVolume.ExecutePipeline();
+      }
+
+#region Update all Swarms
 
       _simulationBounds.center = transform.position + 0.5f * transform.localScale;
       _simulationBounds.size = transform.localScale;
@@ -73,8 +94,6 @@ namespace AnSim.Runtime
       _swarmSimulationUniforms[0].worldmax = transform.position + transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
-
-      Shader.SetGlobalConstantBuffer(_swarmSimulationUniformBufferNameId, _swarmSimulationUniformBuffer, 0, _swarmSimulationUniformsSize);
 
       _swarms.Shuffle(); //Shuffle swarms to reduce disadvantaging any swarm in reaching a target
 

@@ -29,7 +29,9 @@ cbuffer SlaveSwarmUniforms
   float3 target; // Target Position
   float inertiaWeight; // linearly descreases every iteration
   //------------------------------------------- 16byte Boundary
-  float3 maxVelocity;
+  float worldDodgeBias;
+  float unused1;
+  float unused2;
   float sigma; // [mutationStrategyParameter] for inertia and acceleration mutation
   //------------------------------------------- 16byte Boundary
   float sigma_g; // [globalBestDisturbanceConstant] disturbance constant to the global best
@@ -52,7 +54,9 @@ cbuffer MasterSwarmUniforms
   float3 target; // Target Position
   //------------------------------------------- 16byte Boundary
   float inertiaWeight; // linearly descreases every iteration
-  float3 maxVelocity; // Best global value obtained by the slave swarms
+  float worldDodgeBias;
+  float unused1;
+  float unused2;
   //------------------------------------------- 16byte Boundary
   uint swarmParticleBufferMasterOffset; //Index to first Master Swarm Particle in SwarmParticleBuffer
   uint swarmBufferMasterIndex; //Index to Master Swarm in SwarmBuffer   

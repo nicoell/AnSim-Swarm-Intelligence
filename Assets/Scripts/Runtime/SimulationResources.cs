@@ -28,18 +28,44 @@ namespace AnSim.Runtime
         swarmRenderingShader =
           AssetDatabase.LoadAssetAtPath<Shader>(
             anSimShaderPath + "SwarmRendering.shader"),
+        fragmentCountingShader =  
+          AssetDatabase.LoadAssetAtPath<Shader>(
+            anSimShaderPath + "FragmentCounting.shader"),
+        dynamicDepthBufferConstructionShader =  
+          AssetDatabase.LoadAssetAtPath<Shader>(
+            anSimShaderPath + "DynamicDepthBufferConstruction.shader"),
+        distanceFieldConstructionComputeShader =  
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "DistanceFieldConstruction.compute"),
+        prefixSumCompute =  
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "PrefixSumCompute.compute"),
+        clearBufferUintComputeShader =  
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "ClearBufferUint.compute"),
       };
 
       shaders.swarmSimulationMaskedResetKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MaskedReset");
-
       shaders.swarmSimulationSlaveUpdateKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "SlaveUpdate");
-
       shaders.swarmSimulationMasterUpdateKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MasterUpdate");
+      
+
+      shaders.distanceFieldConstructionKernelData = new CsKernelData(shaders.distanceFieldConstructionComputeShader, "CSMain");
+
+      shaders.prefixSumScanInBucketInclusive = new CsKernelData(shaders.prefixSumCompute, "ScanInBucketInclusive");
+      shaders.prefixSumScanInBucketExclusive = new CsKernelData(shaders.prefixSumCompute, "ScanInBucketExclusive");
+      shaders.prefixSumScanBucketResult = new CsKernelData(shaders.prefixSumCompute, "ScanBucketResult");
+      shaders.prefixSumScanAddBucketResult = new CsKernelData(shaders.prefixSumCompute, "ScanAddBucketResult");
+
+      shaders.clearBufferUintKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "Clear");
 
       materials = new MaterialResources()
       {
-        swarmRenderMaterial = new Material(shaders.swarmRenderingShader)
+        swarmRenderMaterial = new Material(shaders.swarmRenderingShader),
+        fragmentCountingMaterial = new Material(shaders.fragmentCountingShader),
+        dynamicDepthBufferConstructionMaterial = new Material(shaders.dynamicDepthBufferConstructionShader)
       };
+
     }
 #endif
 
@@ -51,12 +77,27 @@ namespace AnSim.Runtime
       public CsKernelData swarmSimulationSlaveUpdateKernelData;
       public CsKernelData swarmSimulationMasterUpdateKernelData;
       public Shader swarmRenderingShader;
+
+      public Shader fragmentCountingShader;
+      public Shader dynamicDepthBufferConstructionShader;
+      public ComputeShader distanceFieldConstructionComputeShader;
+      public ComputeShader prefixSumCompute;
+      public ComputeShader clearBufferUintComputeShader;
+
+      public CsKernelData prefixSumScanInBucketInclusive;
+      public CsKernelData prefixSumScanInBucketExclusive;
+      public CsKernelData prefixSumScanBucketResult;
+      public CsKernelData prefixSumScanAddBucketResult;
+      public CsKernelData distanceFieldConstructionKernelData;
+      public CsKernelData clearBufferUintKernelData;
     }
 
     [Serializable]
     public sealed class MaterialResources
     {
       public Material swarmRenderMaterial;
+      public Material fragmentCountingMaterial;
+      public Material dynamicDepthBufferConstructionMaterial;
     }
   }
 }

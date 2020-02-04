@@ -54,6 +54,10 @@ namespace AnSim.Runtime
     public float asyncGpuRequestInterval = 2.0f; //Per component
     public uint maxGpuRequestQueueLength = 2; //Per component
 
+    [Header("Swarm Collision Settings")]
+    [Range(0f, 200f)]
+    public float worldDodgeBias = 10f;
+
     [Header("Render Settings")]
     public Mesh particleMesh;
     public int subMeshIndex = 0;
@@ -284,7 +288,7 @@ namespace AnSim.Runtime
       //_slaveSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
       _slaveSwarmUniforms[0].n = replicatesPerParticle;
       _slaveSwarmUniforms[0].target = foodSource.transform.position;
-      _slaveSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
+      _slaveSwarmUniforms[0].worldDodgeBias = worldDodgeBias;
       _slaveSwarmUniforms[0].sigma = mutationStrategyParameter;
       _slaveSwarmUniforms[0].sigma_g = globalBestDisturbanceConstant;
       //Update Uniform Buffer
@@ -314,7 +318,7 @@ namespace AnSim.Runtime
       //_masterSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
       _masterSwarmUniforms[0].n = replicatesPerParticle;
       _masterSwarmUniforms[0].target = foodSource.transform.position;
-      _masterSwarmUniforms[0].maxVelocity = new Vector3(maxVelocity, maxVelocity, maxVelocity);
+      _masterSwarmUniforms[0].worldDodgeBias = worldDodgeBias;
 
       _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
       _masterSwarmUniforms[0].swarmParticleBufferMasterOffset = (uint)GetMaxSlaveSwarmParticleCount();
@@ -397,7 +401,7 @@ namespace AnSim.Runtime
       _pingPongIndex.Advance();
     }
 
-    
+
     private void ResetSwarmWithMask(ComputeShader simulationShader,
       in CsKernelData csKernelData, int swarmResetCount, uint[] swarmIndexMaskData, SwarmResetUniforms swarmResetUniforms)
     {
@@ -471,13 +475,16 @@ namespace AnSim.Runtime
 
             if (swarm.fitness < 5.5f)
             {
-              _numberOfSwarmsToRevive += foodSource.EatFood();
-              Debug.Log("Swarm ate "+_numberOfSwarmsToRevive+" food.");
+              var foodAmount = foodSource.EatFood();
+              _numberOfSwarmsToRevive += foodAmount;
+
+              if (foodAmount > 0) Debug.Log("Swarm ate " + foodAmount + " food.");
+
             }
 
           }
 
-          Debug.Log(swarmsAlive + " swarms alive.");
+          //Debug.Log(swarmsAlive + " swarms alive.");
 
           /*
            *  ---------------------------------------------------------------

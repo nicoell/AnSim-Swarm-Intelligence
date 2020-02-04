@@ -31,6 +31,11 @@ StructuredBuffer<uint> SwarmIndexBuffer;
 RWStructuredBuffer<SwarmData> SwarmBuffer;
 RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
 
+Texture3D<float> DistanceFieldTexture;
+SamplerState samplerDistanceFieldTexture;
+float4x4 OrthoProjMatrix;
+int VolumeResolution;
+
 // Shared Memory
 groupshared float4 gsLocalBestAndFitness[SWARM_SIZE];
 
@@ -73,7 +78,6 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   /* -----------------------------------------------------------------------
    * Particle Velocity Update
    * -----------------------------------------------------------------------
-   *  - TODO: Forces based due to obstacle avoidance
    */
   
   // Normalize but prevent NaN
@@ -124,9 +128,6 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     + (rand.z * c3) * dirToSlaveGlobalBest;
 #endif
   
-  // Limit new velocity to maxVelocity and restore original sign.
-  //particle.velocity += inertVelocity;
-  //particle.velocity = sign(particle.velocity) * min(abs(particle.velocity), maxVelocity);
   // Handle Particles that are dead by multiplying their velocity with zero
   particle.velocity *= aliveMultiplicator;
   
@@ -152,6 +153,24 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   }
   
   /* -----------------------------------------------------------------------
+   * World Collision Detection and Reaction
+   * -----------------------------------------------------------------------
+   */
+  float3 projectedParticlePos = mul(OrthoProjMatrix, float4(particle.position, 1)).xyz;
+  projectedParticlePos.xy = projectedParticlePos.xy * 0.5f + 0.5f;
+  
+  //float signedDistanceToWorld = 0;
+  float signedDistanceToWorld = DistanceFieldTexture.SampleLevel(samplerDistanceFieldTexture, projectedParticlePos, 0) * (worldmax.x - worldmin.x);
+  float collisionMalus = max(signedDistanceToWorld + worldDodgeBias, 0.0);
+  collisionMalus *= collisionMalus;
+  // inside object > 0; on surface == 0; outside object < 0
+  if (signedDistanceToWorld > 0)
+  {
+    particle.velocity = -particle.velocity;
+    particle.position = particle.position + 2 * particle.velocity;
+  }
+  
+  /* -----------------------------------------------------------------------
    * Particle Fitness and LocalBest Update
    * -----------------------------------------------------------------------
    *  - Fitness is evaluated in terms of distance to target.
@@ -159,7 +178,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   
   // If particle is dead add big handicap to fitness, so it doesn't get chosen a best.
   float3 direction = particle.position - target;
-  float currentFitness = length(direction) + deadMultiplicator * 1000000;
+  float currentFitness = length(direction) + collisionMalus + deadMultiplicator * 1000000;
   
   // Save localBest and fitness, if it's a new optimal local solution
   particle.localBest = (currentFitness < particle.fitness) ? particle.position : particle.localBest;
@@ -183,7 +202,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     uint indexToBest = GetGSLocalBestIndex();
     // Only save index to SharedMemory global Best so everyone can use it.
     // Writing results back to swarm Struct is only visible for groupIndex = 0
-    gsIndexToGlobalBest = indexToBest; 
+    gsIndexToGlobalBest = indexToBest;
     //swarm.globalBest = gsLocalBestAndFitness[indexToBest].xyz;
     //swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   }
@@ -255,10 +274,27 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
         replica.velocity = -replica.velocity * rand_mutation.x;
         replica.position = min(replica.position, worldmax) - rand_mutation * alpha;
       }
+      
+      /* -----------------------------------------------------------------------
+       * World Collision Detection and Reaction
+       * -----------------------------------------------------------------------
+       */
+      float3 projectedParticlePos = mul(OrthoProjMatrix, float4(replica.position, 1)).xyz;
+      projectedParticlePos.xy = projectedParticlePos.xy * 0.5f + 0.5f;
+  
+      float signedDistanceToWorld = DistanceFieldTexture.SampleLevel(samplerDistanceFieldTexture, projectedParticlePos, 0) * (worldmax.x - worldmin.x);
+      float collisionMalus = max(signedDistanceToWorld + worldDodgeBias, 0.0);
+      collisionMalus *= collisionMalus;
+      // inside object > 0; on surface == 0; outside object < 0
+      if (signedDistanceToWorld > 0)
+      {
+        replica.velocity = -replica.velocity;
+        replica.position = replica.position + 2 * replica.velocity;
+      }
   
       // Update fitness
       // Fitness is evaluated in terms of quadratic distance to target.
-      float currentFitness = length(replica.position - target);
+      float currentFitness = length(replica.position - target) + collisionMalus;
   
       // Save localBest and fitness, if it's a new optimal local solution
       replica.localBest = (currentFitness < replica.fitness) ? replica.position : replica.localBest;

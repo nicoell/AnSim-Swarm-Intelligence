@@ -1,0 +1,11 @@
+﻿#pragma kernel Clear
+
+RWStructuredBuffer<uint> BufferToClear;
+
+#include "Definitions/DistanceFieldVolumeSize.hlsl"
+
+[numthreads(THREADS_PER_GROUP, 1, 1)]
+void Clear (uint3 id : SV_DispatchThreadID)
+{
+  BufferToClear[id.x] = 0;
+}

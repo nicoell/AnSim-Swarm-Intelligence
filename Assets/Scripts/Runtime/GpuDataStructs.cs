@@ -38,7 +38,11 @@ namespace AnSim.Runtime
     [FieldOffset(32)]
     public float inertiaWeight; // linearly descreases every iteration
     [FieldOffset(36)]
-    public Vector3 maxVelocity; // Max velocity
+    public float worldDodgeBias;
+    [FieldOffset(40)]
+    public float unused1;
+    [FieldOffset(44)]
+    public float unused2;
     //------------------------------------------- 16byte Boundary
     [FieldOffset(48)]
     public uint swarmParticleBufferMasterOffset; //Index of SwarmBuffer to Master Swarm
@@ -69,7 +73,11 @@ namespace AnSim.Runtime
     public float inertiaWeight;
     //------------------------------------------- 16byte Boundary
     [FieldOffset(32)]
-    public Vector3 maxVelocity;
+    public float worldDodgeBias;
+    [FieldOffset(36)]
+    public float unused1;
+    [FieldOffset(40)]
+    public float unused2;
     [FieldOffset(44)]
     public float sigma;
     //------------------------------------------- 16byte Boundary
@@ -140,5 +148,14 @@ namespace AnSim.Runtime
 
     public static int GetSize() => (3 + 1 + 1) * sizeof(float);
   };
+
+  public struct DistanceFieldObjectMatrices
+  {
+    public Matrix4x4 matrixA;
+    public Matrix4x4 matrixB;
+    public Matrix4x4 matrixC;
+
+    public static int GetSize() => 3 * (4 * 4) * sizeof(float);
+  }
 
 }
