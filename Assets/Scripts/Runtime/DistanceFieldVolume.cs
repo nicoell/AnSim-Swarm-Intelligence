@@ -477,42 +477,58 @@ namespace AnSim.Runtime
         Gizmos.DrawWireCube(_volumeBounds.center - new Vector3(0, 0, _volumeBounds.extents.z), new Vector3(_volumeBounds.size.x, _volumeBounds.size.y, 1));
       }
 
-      if (_volumeResolution >= 64)
-      {
-        Debug.LogWarning("Volume Resolution is too high to show distance Field Information.");
-        showDistanceFieldInformation = false;
-      }
+
 
       if (showDistanceFieldInformation)
       {
         Gizmos.matrix = _gridModelMatrix;
-        for (int x = 0; x < _volumeResolution; x++)
+        if (_volumeResolution >= 64)
         {
-          float colorx = 1.0f * x / _volumeResolution;
-          for (int y = 0; y < _volumeResolution; y++)
+          //Only show selected voxel info.
+          //Debug.LogWarning("Volume Resolution is too high to show distance Field Information.");
+          if (toggleVectorDistanceGizmo)
           {
-            float colory = 1.0f * y / _volumeResolution;
-            for (int z = 0; z < _volumeResolution; z++)
+            var color = new Color(_distanceGradientFieldData[point.x, point.y, point.z].x / 2 + 0.5f, _distanceGradientFieldData[point.x, point.y, point.z].y / 2 + 0.5f, _distanceGradientFieldData[point.x, point.y, point.z].z / 2 + 0.5f, 1);
+            Gizmos.color = color;
+            Gizmos.DrawSphere(new Vector3(point.x + 0.5f, point.y + 0.5f, point.z + 0.5f), 0.1f);
+            Gizmos.DrawRay(new Vector3(point.x + 0.5f, point.y + 0.5f, point.z + 0.5f), _distanceGradientFieldData[point.x, point.y, point.z]);
+          }
+          else
+          {
+            Gizmos.color = new Color(1.0f * point.x / _volumeResolution, 1.0f * point.y / _volumeResolution, 1.0f * point.z / _volumeResolution);
+            Gizmos.DrawSphere(new Vector3(point.x + 0.5f, point.y + 0.5f, point.z + 0.5f), _distanceGradientFieldData[point.x, point.y, point.z].w);
+          }
+        }
+        else
+        {
+          for (int x = 0; x < _volumeResolution; x++)
+          {
+            float colorx = 1.0f * x / _volumeResolution;
+            for (int y = 0; y < _volumeResolution; y++)
             {
-              float depth = _distanceGradientFieldData[x, y, z].w;
-              if (Mathf.Approximately(depth, -1.0f))
+              float colory = 1.0f * y / _volumeResolution;
+              for (int z = 0; z < _volumeResolution; z++)
               {
-                continue;
-              }
+                float depth = _distanceGradientFieldData[x, y, z].w;
+                if (Mathf.Approximately(depth, -1.0f))
+                {
+                  continue;
+                }
 
-              if (toggleVectorDistanceGizmo)
-              {
-                var color = new Color(_distanceGradientFieldData[x, y, z].x / 2 + 0.5f, _distanceGradientFieldData[x, y, z].y / 2 + 0.5f, _distanceGradientFieldData[x, y, z].z / 2 + 0.5f, 1);
-                Gizmos.color = color;
-                Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), 0.1f);
-                Gizmos.DrawRay(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), _distanceGradientFieldData[x, y, z]);
-              }
-              else
-              {
-                Gizmos.color = new Color(colorx, colory, 1.0f * z / _volumeResolution);
-                Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), depth);
-              }
+                if (toggleVectorDistanceGizmo)
+                {
+                  var color = new Color(_distanceGradientFieldData[x, y, z].x / 2 + 0.5f, _distanceGradientFieldData[x, y, z].y / 2 + 0.5f, _distanceGradientFieldData[x, y, z].z / 2 + 0.5f, 1);
+                  Gizmos.color = color;
+                  Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), 0.1f);
+                  Gizmos.DrawRay(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), _distanceGradientFieldData[x, y, z]);
+                }
+                else
+                {
+                  Gizmos.color = new Color(colorx, colory, 1.0f * z / _volumeResolution);
+                  Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), depth);
+                }
 
+              }
             }
           }
         }

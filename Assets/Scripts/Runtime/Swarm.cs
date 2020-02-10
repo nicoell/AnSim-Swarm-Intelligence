@@ -27,7 +27,7 @@ namespace AnSim.Runtime
     public uint replicatesPerParticle = 5; //N
     [Range(0.001f, 2.0f)]
     public float boundaryDisturbanceConstant = 0.22f; //alpha
-    [Range(0.001f, 0.02f)]
+    [Range(0.001f, 1.0f)]
     public float globalBestDisturbanceConstant = 0.005f; //sigma_g
     [Range(0.001f, 1.0f)]
     public float mutationStrategyParameter = 0.22f; //sigma

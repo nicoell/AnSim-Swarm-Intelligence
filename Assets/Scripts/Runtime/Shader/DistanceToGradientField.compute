@@ -36,10 +36,14 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupThreadID)
 
   float3 gradient = (sample100 + sample001 + sample010 + sample111);
   gradient.xy = gradient.yx;
-  
+ 
   //normalize if we have information
   gradient = any(gradient != 0) ? normalize(gradient) : 0;
   
-  DistanceGradientFieldTexture[id] = float4(gradient, currentDepth);
+  if (load100 == -1 || load001 == -1 || load010 == -1 || load111 == -1)
+  {
+    gradient = 0;
+  }
 
+  DistanceGradientFieldTexture[id] = float4(gradient, currentDepth);
 }

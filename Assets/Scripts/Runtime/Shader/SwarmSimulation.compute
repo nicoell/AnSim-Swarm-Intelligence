@@ -7,7 +7,7 @@
 // Prevents graying out unknown preprocessor macros
 #if defined(__INTELLISENSE__)
   #define SETUP_ONLY
-  //#define SLAVE_SIM 
+  #define SLAVE_SIM 
   #define MASTER_SIM
   #define SLAVE_OR_MASTER
 #endif
@@ -55,7 +55,15 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
 {
   // Read Swarm and Particle Data from Buffers
   SwarmData swarm = SwarmBuffer[swarmBufferIndex];
-  SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
+  SwarmParticleData originalParticle = SwarmParticleBuffer[particleBufferIndex];
+  
+  /* -----------------------------------------------------------------------
+   * Classic PSO Algorithm
+   * -----------------------------------------------------------------------
+   */
+  // Copy of input particle to be simulated with classic PSO algorithm
+  SwarmParticleData classicParticle = originalParticle;
+  
   // Get random values.
   float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
   
@@ -66,14 +74,14 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   //DEBUG Only
-  if (particle.fitness > 500.0)
-    particle.health -= 0.0005;
+  if (classicParticle.fitness > 500.0)
+    classicParticle.health -= 0.0005;
   else
-    particle.health += 0.0005;
+    classicParticle.health += 0.0005;
   
-  bool isAlive = IsPositive(particle.health); // 1 when alive, 0 when dead
-  float aliveMultiplicator = IsPositiveAsFloat(particle.health); // 1 when alive, 0 when dead
-  float deadMultiplicator = IsZeroOrNegativeAsFloat(particle.health); // 0 when alive, 1 when dead
+  bool isAlive = IsPositive(classicParticle.health); // 1 when alive, 0 when dead
+  float aliveMultiplicator = IsPositiveAsFloat(classicParticle.health); // 1 when alive, 0 when dead
+  float deadMultiplicator = IsZeroOrNegativeAsFloat(classicParticle.health); // 0 when alive, 1 when dead
   
   /* -----------------------------------------------------------------------
    * Particle Velocity Update
@@ -81,13 +89,13 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   // Normalize but prevent NaN
-  float3 dirToLocalBest = (particle.localBest - particle.position);
+  float3 dirToLocalBest = (classicParticle.localBest - classicParticle.position);
   dirToLocalBest = any(dirToLocalBest != 0) ? normalize(dirToLocalBest) : 0;
-  float3 dirToGlobalBest = (swarm.globalBest - particle.position);
+  float3 dirToGlobalBest = (swarm.globalBest - classicParticle.position);
   dirToGlobalBest = any(dirToGlobalBest != 0) ? normalize(dirToGlobalBest) : 0;
   
 #ifdef SLAVE_SIM
-  particle.velocity = inertiaWeight * particle.velocity
+  classicParticle.velocity = inertiaWeight * classicParticle.velocity
     + (rand.x * c1) * dirToLocalBest //In Richtung Local Best
     + (rand.y * c2) * dirToGlobalBest; //In Richtung Global best
 #endif
@@ -119,17 +127,17 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   GroupMemoryBarrierWithGroupSync();
   
   // Normalize but prevent NaN
-  float3 dirToSlaveGlobalBest = (gsSlaveGlobalBestAndFitness.xyz - particle.position);
+  float3 dirToSlaveGlobalBest = (gsSlaveGlobalBestAndFitness.xyz - classicParticle.position);
   dirToSlaveGlobalBest = any(dirToSlaveGlobalBest != 0) ? normalize(dirToSlaveGlobalBest) : 0;
   
-  particle.velocity = inertiaWeight * particle.velocity
+  classicParticle.velocity = inertiaWeight * classicParticle.velocity
     + (rand.x * c1) * dirToLocalBest
     + (rand.y * c2) * dirToGlobalBest
     + (rand.z * c3) * dirToSlaveGlobalBest;
 #endif
   
   // Handle Particles that are dead by multiplying their velocity with zero
-  particle.velocity *= aliveMultiplicator;
+  classicParticle.velocity *= aliveMultiplicator;
   
   /* -----------------------------------------------------------------------
    * Particle Position Update and Boundary Correction
@@ -138,50 +146,54 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   // Update position
-  particle.position += timeScale * particle.velocity;
+  classicParticle.position += timeScale * classicParticle.velocity;
 
   // Apply boundary corrections
-  if (any(particle.position < worldmin))
+  if (any(classicParticle.position < worldmin))
   {
-    particle.velocity = -particle.velocity * rand.x;
-    particle.position = max(particle.position, worldmin) + rand * alpha;
+    classicParticle.velocity = -classicParticle.velocity * rand.x;
+    classicParticle.position = max(classicParticle.position, worldmin) + rand * alpha;
   }
-  if (any(particle.position > worldmax))
+  if (any(classicParticle.position > worldmax))
   {
-    particle.velocity = -particle.velocity * rand.x;
-    particle.position = min(particle.position, worldmax) - rand * alpha;
+    classicParticle.velocity = -classicParticle.velocity * rand.x;
+    classicParticle.position = min(classicParticle.position, worldmax) - rand * alpha;
   }
   
   /* -----------------------------------------------------------------------
    * World Collision Detection and Reaction
    * -----------------------------------------------------------------------
    */
-  float3 projectedParticlePos = mul(OrthoProjMatrix, float4(particle.position, 1)).xyz;
+  float3 projectedParticlePos = mul(OrthoProjMatrix, float4(classicParticle.position, 1)).xyz;
   projectedParticlePos.xy = (projectedParticlePos.yx * 0.5f + 0.5f);
   float4 gradientDepthToWorld = DistanceGradientFieldTexture.SampleLevel(samplerDistanceGradientFieldTexture, projectedParticlePos, 0);
   
   float distanceToWorld = gradientDepthToWorld.w * (worldmax.x - worldmin.x) / 2.0;
   
-  float collisionMalus = max(distanceToWorld + worldDodgeBias, 0.0);
-  collisionMalus *= 1;
+  float collisionMalus = 0.0;
   // inside object > 0; on surface == 0; outside object < 0
   if (distanceToWorld > 0)
   {
-    particle.velocity = reflect(particle.velocity, -gradientDepthToWorld.xyz);
-    particle.position = particle.position - distanceToWorld * gradientDepthToWorld.xyz;
+    classicParticle.velocity = reflect(classicParticle.velocity, -gradientDepthToWorld.xyz);
+    classicParticle.position = classicParticle.position - distanceToWorld * gradientDepthToWorld.xyz - sign(gradientDepthToWorld.xyz) * rand * alpha;
+    collisionMalus = distanceToWorld + worldDodgeBias;
+    distanceToWorld = 0.0;
   }
+
+  float3 normalizedVelocity = (classicParticle.velocity);
   
-  /*
-  float3 normalizedVelocity = normalize(particle.velocity);
+  float dodgeFactor = 1.0 - saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
+  dodgeFactor *= max(dot(normalizedVelocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
+
+  float3 dodgeDirection = dodgeFactor * cross(normalize(target - classicParticle.position), -gradientDepthToWorld.xyz);
+
+  //classicParticle.velocity += dodgeDirection2;
+  //classicParticle.position += dodgeDirection2;
   
-  float dodgeFactor = 1.0;
-  //dodgeFactor -= saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
-  dodgeFactor *= saturate(dot(particle.velocity, gradientDepthToWorld.xyz)); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
-  
-  //float3 dodgeDirection
-  
-  particle.velocity += dodgeFactor * cross(normalizedVelocity, gradientDepthToWorld.xyz);
-  particle.position += particle.velocity;*/
+  float speed = length(classicParticle.velocity);
+  float3 velocityChange = classicParticle.velocity - normalize(classicParticle.velocity + dodgeDirection) * speed;
+  classicParticle.velocity += velocityChange;
+  classicParticle.position += velocityChange;
   
   
   /* -----------------------------------------------------------------------
@@ -191,12 +203,12 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   // If particle is dead add big handicap to fitness, so it doesn't get chosen a best.
-  float3 direction = particle.position - target;
+  float3 direction = classicParticle.position - target;
   float currentFitness = length(direction) + collisionMalus + deadMultiplicator * 1000000;
   
   // Save localBest and fitness, if it's a new optimal local solution
-  particle.localBest = (currentFitness < particle.fitness) ? particle.position : particle.localBest;
-  particle.fitness = min(particle.fitness, currentFitness);
+  classicParticle.localBest = (currentFitness < classicParticle.fitness) ? classicParticle.position : classicParticle.localBest;
+  classicParticle.fitness = min(classicParticle.fitness, currentFitness);
   
   /* -----------------------------------------------------------------------
    * Swarm Fitness, GlobalBest and ParticlesAlive Update
@@ -204,7 +216,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    *   - Utilizes GroupShared Memory to find the best solution for this swarm
    */
   
-  gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
+  gsLocalBestAndFitness[groupIndex] = float4(classicParticle.localBest, classicParticle.fitness);
   gsParticlesAlive = 0; //Init ParticlesAlive to 0 (RaceCondition warning, but no problem)
   
   GroupMemoryBarrierWithGroupSync();
@@ -229,14 +241,13 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    *     a better local best for original particle
    *   - Uses the in this iteration already updated swarms global best and particles local best
    */
-  
+  SwarmParticleData bestParticle = classicParticle;
   if (isAlive)// Only create replicas if current particle isnt dead
   {
     //Replicate current particle N times and select its best replica
-    SwarmParticleData best_replica = particle;
     for (uint i = 0; i < n; i++)
     {
-      SwarmParticleData replica = particle;
+      SwarmParticleData replica = originalParticle;
       //create random variables [0,1] for all mutations and velocity equations
       float4 rand_mc = hash43(float3(particleBufferIndex, timeSinceStart, i + 0.6f));
       float2 rand_mw = hash22(float2(rand_mc.x, timeSinceStart));
@@ -244,10 +255,10 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       float3 rand_mutation = hash33(float3(rand_mbg, i + 23.2f));
         
       //calculate mutations
-      float mw = inertiaWeight + (1 + sigma * NormDist_0_1(rand_mw.x, rand_mw.y)); // Equation 7
-      float mc1 = c1 + (1 + sigma * NormDist_0_1(rand_mc.x, rand_mc.y));; // Equation 8
-      float mc2 = c2 + (1 + sigma * NormDist_0_1(rand_mc.z, rand_mc.w));; // Equation 9
-      float3 mbg = gsLocalBestAndFitness[gsIndexToGlobalBest].xyz + (1 + sigma_g * NormDist_0_1(rand_mbg.x, rand_mbg.y));; // Equation 10. mutation global best
+      float mw = min(inertiaWeight + (sigma * NormDist_0_1(rand_mw.x, rand_mw.y)), 1.0); // Equation 7
+      float mc1 = c1 + (sigma * NormDist_0_1(rand_mc.x, rand_mc.y)); // Equation 8
+      float mc2 = c2 + (sigma * NormDist_0_1(rand_mc.z, rand_mc.w)); // Equation 9
+      float3 mbg = gsLocalBestAndFitness[gsIndexToGlobalBest].xyz + (sigma_g * NormDist_0_1(rand_mbg.x, rand_mbg.y));; // Equation 10. mutation global best
         
       // Normalize but prevent NaN
       float3 dirToLocalBest = (replica.localBest - replica.position);
@@ -256,7 +267,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       dirToGlobalBest = any(dirToGlobalBest != 0) ? normalize(dirToGlobalBest) : 0;
 #ifdef SLAVE_SIM
             //update velocity slave swarm. Equation 11
-            replica.velocity = mw * replica.velocity 
+      replica.velocity = mw * replica.velocity 
             + (rand_mutation.x * mc1) * dirToLocalBest
             + (rand_mutation.y * mc2) * dirToGlobalBest;
 #endif        
@@ -275,7 +286,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
             + (rand_mutation.z * mc3) * dirToSlaveGlobalBest;
 #endif            
       // Update position. Equation 2
-      replica.position += replica.velocity;
+      replica.position += timeScale * replica.velocity;
         
       // Apply boundary corrections. Equation 4 & 5
       if (any(replica.position < worldmin))
@@ -299,14 +310,31 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   
       float distanceToWorld = gradientDepthToWorld.w * (worldmax.x - worldmin.x) / 2.0;
   
-      float collisionMalus2 = max(distanceToWorld + worldDodgeBias, 0.0);
-      collisionMalus2 *= 0;
-  // inside object > 0; on surface == 0; outside object < 0
-      /*if (distanceToWorld > 0)
+      float collisionMalus2 = 0.0;
+      // inside object > 0; on surface == 0; outside object < 0
+      if (distanceToWorld > 0)
       {
         replica.velocity = reflect(replica.velocity, -gradientDepthToWorld.xyz);
-        replica.position = replica.position - distanceToWorld * gradientDepthToWorld.xyz;
-      }*/
+        replica.position = replica.position - distanceToWorld * gradientDepthToWorld.xyz - sign(gradientDepthToWorld.xyz) * rand_mutation * alpha;
+        collisionMalus2 = distanceToWorld + worldDodgeBias;
+        distanceToWorld = 0.0;
+      }
+      
+      
+      float3 normalizedVelocity = (replica.velocity);
+      
+      float dodgeFactor = 1.0 - saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
+      dodgeFactor *= max(dot(normalizedVelocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
+
+      float3 dodgeDirection2 = dodgeFactor * cross(normalize(target - replica.position), -gradientDepthToWorld.xyz);
+
+      //replica.velocity += dodgeDirection2;
+      //replica.position += dodgeDirection2;
+      
+      float speed = length(replica.velocity);
+      float3 velocityChange = replica.velocity - normalize(replica.velocity + dodgeDirection2) * speed;
+      replica.velocity += velocityChange;
+      replica.position += velocityChange;
   
       // Update fitness
       // Fitness is evaluated in terms of quadratic distance to target.
@@ -317,16 +345,17 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       replica.fitness = min(replica.fitness, currentFitness);
             
       //If we have a new best replica we save it
-      if (replica.fitness < best_replica.fitness)
+      if (replica.fitness < bestParticle.fitness)
       {
-        best_replica = replica;
+        bestParticle = replica;
       }
     }
     // Update original particles local best with the best replica
-    particle.localBest = (best_replica.fitness < particle.fitness) ? best_replica.localBest : particle.localBest;
-    particle.fitness = min(particle.fitness, best_replica.fitness);
+    //particle.localBest = (bestParticle.fitness < particle.fitness) ? bestParticle.localBest : particle.localBest;
+    //particle.fitness = min(particle.fitness, bestParticle.fitness);
+    
   
-    gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
+    gsLocalBestAndFitness[groupIndex] = float4(bestParticle.localBest, bestParticle.fitness);
   }
     //TODO: Sinnvoll mit if(isAlive)? Hier muss sowieso auf alle Threads gewartet werden für global best. Sync muss auch außerhalb von if() liegen,
     //da es sonst eventuell nicht erreicht wird von Threads
@@ -345,7 +374,9 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
   }
   
-  SwarmParticleBuffer[particleBufferIndex] = particle; // Update ParticleData
+  //GroupMemoryBarrierWithGroupSync();
+  
+  SwarmParticleBuffer[particleBufferIndex] = bestParticle; // Update ParticleData
   
   if (groupIndex == 0) //Only groupIndex 0 writes SwarmData back to buffer
   {
@@ -382,16 +413,18 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
 
     int swarmsLeftToRevive = numberOfSwarmsToRevive;
     // Iterate all SlaveSwarms and reactive them. Reactive as much as possible, stop if we iterated all swarms or if we revived enough.
-    for (uint k = 0; (k < swarmBufferMasterIndex) && (swarmsLeftToRevive > 0); k++)
+    for (uint k = 0; k < swarmBufferMasterIndex; k++)
     {
-      // Find a dead swarm
-      if (SwarmBuffer[k].particlesAlive == 0)
+      if (swarmsLeftToRevive > 0 && SwarmBuffer[k].particlesAlive == 0)
       {
         uint index = SwarmCounterBuffer.IncrementCounter();
         RWSwarmIndexBuffer[index] = k;
         swarmsLeftToRevive--;
       }
-
+      SwarmBuffer[k].globalBest = swarm.globalBest;
+      SwarmBuffer[k].fitness = swarm.fitness;
+      // Find a dead swarm
+      
     }
 #endif
     
