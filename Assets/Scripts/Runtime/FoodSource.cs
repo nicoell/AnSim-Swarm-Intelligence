@@ -10,6 +10,8 @@ public class FoodSource : MonoBehaviour
   public int minFoodAmount = 1;
   public int maxFoodAmount = 16;
 
+  public bool enableAutomaticPlacement = true;
+
   private int _foodAmount;
 
   public int EatFood()
@@ -24,7 +26,7 @@ public class FoodSource : MonoBehaviour
   {
     if (_foodAmount == 0)
     {
-      transform.position = swarmSimManager.GetValidFoodPosition();
+      if (enableAutomaticPlacement) transform.position = swarmSimManager.GetValidFoodPosition();
       _foodAmount = Random.Range(minFoodAmount, maxFoodAmount);
     }
   }

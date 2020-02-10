@@ -95,7 +95,7 @@ namespace AnSim.Runtime
     [FieldOffset(0)]
     public Vector3 worldmin;
     [FieldOffset(12)]
-    public float deltaTime;
+    public float timeScale;
     //------------------------------------------- 16byte Boundary
     [FieldOffset(16)]
     public Vector3 worldmax;

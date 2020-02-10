@@ -31,8 +31,8 @@ StructuredBuffer<uint> SwarmIndexBuffer;
 RWStructuredBuffer<SwarmData> SwarmBuffer;
 RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
 
-Texture3D<float> DistanceFieldTexture;
-SamplerState samplerDistanceFieldTexture;
+Texture3D<float4> DistanceGradientFieldTexture;
+SamplerState samplerDistanceGradientFieldTexture;
 float4x4 OrthoProjMatrix;
 int VolumeResolution;
 
@@ -138,7 +138,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   
   // Update position
-  particle.position += particle.velocity;
+  particle.position += timeScale * particle.velocity;
 
   // Apply boundary corrections
   if (any(particle.position < worldmin))
@@ -157,18 +157,32 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    * -----------------------------------------------------------------------
    */
   float3 projectedParticlePos = mul(OrthoProjMatrix, float4(particle.position, 1)).xyz;
-  projectedParticlePos.xy = projectedParticlePos.xy * 0.5f + 0.5f;
+  projectedParticlePos.xy = (projectedParticlePos.yx * 0.5f + 0.5f);
+  float4 gradientDepthToWorld = DistanceGradientFieldTexture.SampleLevel(samplerDistanceGradientFieldTexture, projectedParticlePos, 0);
   
-  //float signedDistanceToWorld = 0;
-  float signedDistanceToWorld = DistanceFieldTexture.SampleLevel(samplerDistanceFieldTexture, projectedParticlePos, 0) * (worldmax.x - worldmin.x);
-  float collisionMalus = max(signedDistanceToWorld + worldDodgeBias, 0.0);
-  collisionMalus *= collisionMalus;
+  float distanceToWorld = gradientDepthToWorld.w * (worldmax.x - worldmin.x) / 2.0;
+  
+  float collisionMalus = max(distanceToWorld + worldDodgeBias, 0.0);
+  collisionMalus *= 1;
   // inside object > 0; on surface == 0; outside object < 0
-  if (signedDistanceToWorld > 0)
+  if (distanceToWorld > 0)
   {
-    particle.velocity = -particle.velocity;
-    particle.position = particle.position + 2 * particle.velocity;
+    particle.velocity = reflect(particle.velocity, -gradientDepthToWorld.xyz);
+    particle.position = particle.position - distanceToWorld * gradientDepthToWorld.xyz;
   }
+  
+  /*
+  float3 normalizedVelocity = normalize(particle.velocity);
+  
+  float dodgeFactor = 1.0;
+  //dodgeFactor -= saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
+  dodgeFactor *= saturate(dot(particle.velocity, gradientDepthToWorld.xyz)); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
+  
+  //float3 dodgeDirection
+  
+  particle.velocity += dodgeFactor * cross(normalizedVelocity, gradientDepthToWorld.xyz);
+  particle.position += particle.velocity;*/
+  
   
   /* -----------------------------------------------------------------------
    * Particle Fitness and LocalBest Update
@@ -280,21 +294,23 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
        * -----------------------------------------------------------------------
        */
       float3 projectedParticlePos = mul(OrthoProjMatrix, float4(replica.position, 1)).xyz;
-      projectedParticlePos.xy = projectedParticlePos.xy * 0.5f + 0.5f;
+      projectedParticlePos.xy = (projectedParticlePos.yx * 0.5f + 0.5f);
+      float4 gradientDepthToWorld = DistanceGradientFieldTexture.SampleLevel(samplerDistanceGradientFieldTexture, projectedParticlePos, 0);
   
-      float signedDistanceToWorld = DistanceFieldTexture.SampleLevel(samplerDistanceFieldTexture, projectedParticlePos, 0) * (worldmax.x - worldmin.x);
-      float collisionMalus = max(signedDistanceToWorld + worldDodgeBias, 0.0);
-      collisionMalus *= collisionMalus;
-      // inside object > 0; on surface == 0; outside object < 0
-      if (signedDistanceToWorld > 0)
+      float distanceToWorld = gradientDepthToWorld.w * (worldmax.x - worldmin.x) / 2.0;
+  
+      float collisionMalus2 = max(distanceToWorld + worldDodgeBias, 0.0);
+      collisionMalus2 *= 0;
+  // inside object > 0; on surface == 0; outside object < 0
+      /*if (distanceToWorld > 0)
       {
-        replica.velocity = -replica.velocity;
-        replica.position = replica.position + 2 * replica.velocity;
-      }
+        replica.velocity = reflect(replica.velocity, -gradientDepthToWorld.xyz);
+        replica.position = replica.position - distanceToWorld * gradientDepthToWorld.xyz;
+      }*/
   
       // Update fitness
       // Fitness is evaluated in terms of quadratic distance to target.
-      float currentFitness = length(replica.position - target) + collisionMalus;
+      float currentFitness = length(replica.position - target) + collisionMalus2;
   
       // Save localBest and fitness, if it's a new optimal local solution
       replica.localBest = (currentFitness < replica.fitness) ? replica.position : replica.localBest;

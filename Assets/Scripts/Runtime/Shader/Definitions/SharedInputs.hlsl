@@ -4,7 +4,7 @@
 cbuffer SwarmSimulationUniforms
 {
   float3 worldmin; // World Boundaries Min 
-  float deltaTime;
+  float timeScale;
   //------------------------------------------- 16byte Boundary
   float3 worldmax; // World Boundaries Max
   float timeSinceStart;

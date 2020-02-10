@@ -37,7 +37,10 @@ namespace AnSim.Runtime
         distanceFieldConstructionComputeShader =  
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "DistanceFieldConstruction.compute"),
-        prefixSumCompute =  
+        distanceToGradientFieldComputeShader =  
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "DistanceToGradientField.compute"),
+        prefixSumComputeShader =  
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "PrefixSumCompute.compute"),
         clearBufferUintComputeShader =  
@@ -51,11 +54,12 @@ namespace AnSim.Runtime
       
 
       shaders.distanceFieldConstructionKernelData = new CsKernelData(shaders.distanceFieldConstructionComputeShader, "CSMain");
+      shaders.distanceToGradientKernelData = new CsKernelData(shaders.distanceToGradientFieldComputeShader, "CSMain");
 
-      shaders.prefixSumScanInBucketInclusive = new CsKernelData(shaders.prefixSumCompute, "ScanInBucketInclusive");
-      shaders.prefixSumScanInBucketExclusive = new CsKernelData(shaders.prefixSumCompute, "ScanInBucketExclusive");
-      shaders.prefixSumScanBucketResult = new CsKernelData(shaders.prefixSumCompute, "ScanBucketResult");
-      shaders.prefixSumScanAddBucketResult = new CsKernelData(shaders.prefixSumCompute, "ScanAddBucketResult");
+      shaders.prefixSumScanInBucketInclusiveKernelData = new CsKernelData(shaders.prefixSumComputeShader, "ScanInBucketInclusive");
+      shaders.prefixSumScanInBucketExclusiveKernelData = new CsKernelData(shaders.prefixSumComputeShader, "ScanInBucketExclusive");
+      shaders.prefixSumScanBucketResultKernelData = new CsKernelData(shaders.prefixSumComputeShader, "ScanBucketResult");
+      shaders.prefixSumScanAddBucketResultKernelData = new CsKernelData(shaders.prefixSumComputeShader, "ScanAddBucketResult");
 
       shaders.clearBufferUintKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "Clear");
 
@@ -81,14 +85,16 @@ namespace AnSim.Runtime
       public Shader fragmentCountingShader;
       public Shader dynamicDepthBufferConstructionShader;
       public ComputeShader distanceFieldConstructionComputeShader;
-      public ComputeShader prefixSumCompute;
+      public ComputeShader distanceToGradientFieldComputeShader;
+      public ComputeShader prefixSumComputeShader;
       public ComputeShader clearBufferUintComputeShader;
 
-      public CsKernelData prefixSumScanInBucketInclusive;
-      public CsKernelData prefixSumScanInBucketExclusive;
-      public CsKernelData prefixSumScanBucketResult;
-      public CsKernelData prefixSumScanAddBucketResult;
+      public CsKernelData prefixSumScanInBucketInclusiveKernelData;
+      public CsKernelData prefixSumScanInBucketExclusiveKernelData;
+      public CsKernelData prefixSumScanBucketResultKernelData;
+      public CsKernelData prefixSumScanAddBucketResultKernelData;
       public CsKernelData distanceFieldConstructionKernelData;
+      public CsKernelData distanceToGradientKernelData;
       public CsKernelData clearBufferUintKernelData;
     }
 

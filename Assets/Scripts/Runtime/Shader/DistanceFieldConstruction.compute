@@ -17,52 +17,61 @@ int volumeResolution; // volume = viewport = grid resolutiob
 [numthreads(VOLUME_RESOLUTION, 1, 1)]
 void CSMain(uint3 gridPointId : SV_DispatchThreadID)
 {
-  float4 centeredPos = float4(gridPointId, 1) + float4(0.5, 0.5, 0.5, 0);
+  float4 centeredPos = float4(gridPointId, 1)  + float4(0.5, 0.5, 0.5, 0);
   
   uint baseIndex = 0;
   int majorityVote = 0;
   float depthApproximation = 1.0;
   
-  float debug = -10;
+  float3 projectedPos = mul(gridModelViewProj[0], centeredPos).xyz;
+  projectedPos.xy = projectedPos.yx * 0.5 + 0.5; //Flip xy and bring to 0..1 range
+  projectedPos.y = 1.0f - projectedPos.y; //Invert y
   
   [unroll]
   for (uint i = 0; i < 3; i++)
   {
-    float3 projectedPos = mul(gridModelViewProj[i], centeredPos).xyz;
+    float3 curPos;
+    if (i == 0)
+    {
+      curPos = projectedPos.xyz;
+    }
+    if (i == 1)
+    {
+      curPos = projectedPos.xzy;
+      curPos.z = 1.0f - curPos.z;
+    }
+    else if (i == 2)
+    {
+      curPos = projectedPos.zyx;
+      curPos.z = 1.0f - curPos.z;
+    }
     
-    
-    projectedPos.xy = projectedPos.xy * 0.5f + 0.5f; //Bring to 0..1 range
-    projectedPos.xy *= volumeResolution; //And to 0..VolumeResolution Range
-    
-    debug = projectedPos.y;
-    
-    uint projectedPixelIndex = baseIndex + uint(projectedPos.y) * volumeResolution + uint(projectedPos.x);
-    uint dynamicIndexStart = (projectedPixelIndex == 0) ? 0 : PrefixSumBuffer[projectedPixelIndex - 1];
+    curPos.xy *= volumeResolution; //And to 0..VolumeResolution Range
+
+    uint projectedPixelIndex = baseIndex + uint(curPos.y) * volumeResolution
+    + uint(curPos.x);
+    uint dynamicIndexStart = PrefixSumBuffer[projectedPixelIndex - 1];
     uint dynamicIndexEnd = PrefixSumBuffer[projectedPixelIndex];
+
 
     bool isIn = false;
     for (uint k = dynamicIndexStart; k < dynamicIndexEnd; k++)
     {
       float depth = DynamicDepthBuffer[k];
-      
-      if (depth < projectedPos.z)
+
+      if (curPos.z < depth)
       {
         isIn = !isIn;
       }
-      depthApproximation = min(abs(projectedPos.z - depth), depthApproximation);
+      depthApproximation = min(abs(curPos.z - depth), depthApproximation);
     }
-    //Only vote wehen number of samples is even
-    //if ((dynamicIndexEnd - dynamicIndexStart) % 2 == 0)
-    {
-      majorityVote += isIn ? 1 : -1;
-    }
+
+    majorityVote += isIn ? 1 : -1;
     baseIndex += pixelCount;
-    
-    
   }
+
   //Convert depth approximation to signed depth depending on majority Vote
-  depthApproximation = (majorityVote > 0) ? depthApproximation : -1.0 * depthApproximation;
-  
-  //DistanceFieldTexture[gridPointId] = depthApproximation;
-  DistanceFieldTexture[gridPointId] = depthApproximation;
+  depthApproximation = (majorityVote >= 0) ? depthApproximation : -1.0 * depthApproximation;
+
+  DistanceFieldTexture[gridPointId] = (depthApproximation);
 }

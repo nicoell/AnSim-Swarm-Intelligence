@@ -10,14 +10,28 @@ namespace AnSim.Runtime
 {
   public class SwarmSimManager : MonoBehaviour
   {
+    [Header("Simulation Settings")]
+    [Range(0.01f, 2.00f)]
+    public float timeScale = 0.1f;
+
     [Header("Resource Management")]
     public SimulationResources simulationResources;
 
-    [Header("DistanceFieldVolume")] 
+    [Header("DistanceFieldVolume")]
     public bool updateEveryFrame = false;
-    
+    public bool enableDistanceFieldGizmos = false;
+    public bool showInstancedDepthTexture = false;
+    public bool drawTransformedMeshes = false;
+    public bool showDistanceFieldInformation = false;
+    public bool drawViewingPlanes = false;
+    public bool toggleVectorDistanceGizmo = false;
+    [Range(0, 2)]
+    public int debugGizmoInstanceId = 0;
+    public Vector3Int highlightGridPoint = Vector3Int.zero;
+
     private DistanceFieldVolume _distanceFieldVolume;
-    private readonly int _distanceFieldTextureNameId = Shader.PropertyToID("DistanceFieldTexture");
+    private readonly int _distanceGradientFieldTextureNameId = Shader.PropertyToID("DistanceGradientFieldTexture");
+    
 
     private List<Swarm> _swarms;
     private Bounds _simulationBounds;
@@ -50,15 +64,15 @@ namespace AnSim.Runtime
       // Set necessary resources to simulation compute shader + kernels
       simulationResources.shaders.swarmSimulationComputeShader.SetMatrix("OrthoProjMatrix", _distanceFieldVolume.OrthoProjectionMatrix);
       simulationResources.shaders.swarmSimulationComputeShader.SetInt("VolumeResolution", _distanceFieldVolume.VolumeResolution);
-      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMaskedResetKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
-      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
-      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMaskedResetKernelData.index, _distanceGradientFieldTextureNameId, _distanceFieldVolume.DistanceGradientField3DTexture);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index, _distanceGradientFieldTextureNameId, _distanceFieldVolume.DistanceGradientField3DTexture);
+      simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index, _distanceGradientFieldTextureNameId, _distanceFieldVolume.DistanceGradientField3DTexture);
 
       _distanceFieldVolume.ExecutePipeline();
 
       #region Init all Swarms
       //Update global Swarm Simulation Uniforms
-      _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
+      _swarmSimulationUniforms[0].timeScale = timeScale;
       _swarmSimulationUniforms[0].timeSinceStart = Time.time;
       _swarmSimulationUniforms[0].worldmax = transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
@@ -83,13 +97,13 @@ namespace AnSim.Runtime
         _distanceFieldVolume.ExecutePipeline();
       }
 
-#region Update all Swarms
+      #region Update all Swarms
 
       _simulationBounds.center = transform.position + 0.5f * transform.localScale;
       _simulationBounds.size = transform.localScale;
 
       //Update global Swarm Simulation Uniforms
-      _swarmSimulationUniforms[0].deltaTime = Time.deltaTime;
+      _swarmSimulationUniforms[0].timeScale = timeScale;
       _swarmSimulationUniforms[0].timeSinceStart = Time.time;
       _swarmSimulationUniforms[0].worldmax = transform.position + transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
@@ -131,16 +145,18 @@ namespace AnSim.Runtime
         {
           _swarms.Add(swarm);
           Debug.Log("Registered Swarm: " + swarm.name);
-        } else
+        }
+        else
         {
           Debug.Log("SwarmList already contains swarm: " + swarm.name);
         }
-      } else
+      }
+      else
       {
         Debug.Log("Swarm tried to register itself before Swarms List was created.");
         Debug.Log("Please change the Script Execution Order, so SwarmSimManager comes before Swarm.");
       }
-        
+
     }
 
     public void RemoveDisabledSwarms()
@@ -175,6 +191,8 @@ namespace AnSim.Runtime
     private void OnDrawGizmos()
     {
       Gizmos.DrawWireCube(_simulationBounds.center, _simulationBounds.size);
+
+      if (enableDistanceFieldGizmos && _distanceFieldVolume != null) _distanceFieldVolume.DrawGizmos(debugGizmoInstanceId, highlightGridPoint, showInstancedDepthTexture, drawViewingPlanes, drawTransformedMeshes, showDistanceFieldInformation, toggleVectorDistanceGizmo);
     }
   }
 }

@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using Ansim.Runtime;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 namespace AnSim.Runtime
 {
@@ -29,12 +24,17 @@ namespace AnSim.Runtime
     private readonly int _dynamicDepthBufferNameId = Shader.PropertyToID("DynamicDepthBuffer");
     private readonly int _uintBufferToClearNameId = Shader.PropertyToID("BufferToClear");
     private readonly int _distanceFieldTextureNameId = Shader.PropertyToID("DistanceFieldTexture");
+    private readonly int _distanceGradientFieldTextureNameId = Shader.PropertyToID("DistanceGradientFieldTexture");
 
     private Bounds _volumeBounds;
     private Matrix4x4 _orthoProjectionMatrix;
     public Matrix4x4 OrthoProjectionMatrix => _orthoProjectionMatrix;
+    private Matrix4x4[] _viewMatrices = new Matrix4x4[3];
     private Matrix4x4[] _viewProjMatrices = new Matrix4x4[3];
     private Matrix4x4[] _gridModelViewProjMatrices = new Matrix4x4[3];
+    private Matrix4x4 _gridModelMatrix;
+
+    private Vector4[,,] _distanceGradientFieldData;
 
     private int _pixelCount;
     private int _totalPixelCount; // for all viewing directions
@@ -42,6 +42,7 @@ namespace AnSim.Runtime
 
     private CommandBuffer _cmdBuffer1;
     private CommandBuffer _cmdBuffer2;
+    private bool _shouldRunCmdBuffer1 = true;
     private RenderTexture _dummyRenderTarget;
 
     private ComputeBuffer _distanceFieldObjectDataBuffer;
@@ -50,15 +51,17 @@ namespace AnSim.Runtime
     private ComputeBuffer _prefixSumResultBuffer;
     private ComputeBuffer _dynamicDepthBuffer;
     public RenderTexture DistanceField3DTexture { get; private set; }
+    public RenderTexture DistanceGradientField3DTexture { get; private set; }
 
     private List<DistanceFieldObjectData> _distanceFieldObjects;
+    private DistanceFieldObjectMatrices[] _distanceFieldObjectData;
 
 
     public DistanceFieldVolume(in SimulationResources simulationResources, Bounds volumeBounds)
     {
       _simulationResources = simulationResources;
       // Volume Resolution is limited by by PrefixSum ComputeShader. The prefixSum number of threads should exactly be volumeResolution * sqrt(3), since this wouldn't work we take the double. 
-      _prefixSumThreadsPerGroup = (int)_simulationResources.shaders.prefixSumScanInBucketExclusive.numThreadsX;
+      _prefixSumThreadsPerGroup = (int)_simulationResources.shaders.prefixSumScanInBucketExclusiveKernelData.numThreadsX;
       _volumeResolution = _prefixSumThreadsPerGroup / 2;
       _volumeBounds = volumeBounds;
 
@@ -125,19 +128,17 @@ namespace AnSim.Runtime
 
     public void UpdateDistanceFieldObjectsData()
     {
-      var distanceFieldObjectData = new DistanceFieldObjectMatrices[_distanceFieldObjects.Count];
+      _distanceFieldObjectData = new DistanceFieldObjectMatrices[_distanceFieldObjects.Count];
 
       for (var i = 0; i < _distanceFieldObjects.Count; i++)
       {
         var distanceFieldObject = _distanceFieldObjects[i];
 
-        distanceFieldObjectData[i].matrixA = _viewProjMatrices[0] * distanceFieldObject.transform.localToWorldMatrix;
-        distanceFieldObjectData[i].matrixB = _viewProjMatrices[1] * distanceFieldObject.transform.localToWorldMatrix;
-        distanceFieldObjectData[i].matrixC = _viewProjMatrices[2] * distanceFieldObject.transform.localToWorldMatrix;
+        _distanceFieldObjectData[i].matrixA = _viewProjMatrices[0] * distanceFieldObject.transform.localToWorldMatrix;
+        _distanceFieldObjectData[i].matrixB = _viewProjMatrices[1] * distanceFieldObject.transform.localToWorldMatrix;
+        _distanceFieldObjectData[i].matrixC = _viewProjMatrices[2] * distanceFieldObject.transform.localToWorldMatrix;
       }
-
-      //Debug.Log("Updated " + _distanceFieldObjects.Count + " objects.");
-      _distanceFieldObjectDataBuffer.SetData(distanceFieldObjectData);
+      _distanceFieldObjectDataBuffer.SetData(_distanceFieldObjectData);
     }
 
 
@@ -174,22 +175,25 @@ namespace AnSim.Runtime
       {
         _orthoProjectionMatrix = Matrix4x4.Ortho(_volumeBounds.min.x, _volumeBounds.max.x, _volumeBounds.min.y, _volumeBounds.max.y, -_volumeBounds.max.z, -_volumeBounds.min.z);
 
-        //Correct projectrion matrix so rendertexture is not upside down
-        _orthoProjectionMatrix = GL.GetGPUProjectionMatrix(_orthoProjectionMatrix, true);
+        //Correct projection matrix
+        _orthoProjectionMatrix = GL.GetGPUProjectionMatrix(_orthoProjectionMatrix, false);
 
-        var rotationAxes = new[] { Vector3.right, Vector3.up };
-        var rotations = new[] { Quaternion.AngleAxis(90, rotationAxes[0]), Quaternion.AngleAxis(90, rotationAxes[1]) };
+        var rotationAxes = new[] { Vector3.forward, Vector3.right, Vector3.up };
+        var rotations = new[] { Quaternion.AngleAxis(0, rotationAxes[0]), Quaternion.AngleAxis(90, rotationAxes[1]), Quaternion.AngleAxis(90, rotationAxes[2]) };
 
-        _viewProjMatrices[0] = _orthoProjectionMatrix * Matrix4x4.Rotate(Quaternion.identity);
-        _viewProjMatrices[1] = _orthoProjectionMatrix * (Matrix4x4.Translate(_volumeBounds.center) * Matrix4x4.Rotate(rotations[0]) * Matrix4x4.Translate(-_volumeBounds.center));
-        _viewProjMatrices[2] = _orthoProjectionMatrix * (Matrix4x4.Translate(_volumeBounds.center) * Matrix4x4.Rotate(rotations[1]) * Matrix4x4.Translate(-_volumeBounds.center));
+        _viewMatrices[0] = Matrix4x4.identity;
+        _viewMatrices[1] = (Matrix4x4.Translate(_volumeBounds.center) * Matrix4x4.Rotate(rotations[1]) * Matrix4x4.Translate(-_volumeBounds.center));
+        _viewMatrices[2] = (Matrix4x4.Translate(_volumeBounds.center) * Matrix4x4.Rotate(rotations[2]) * Matrix4x4.Translate(-_volumeBounds.center));
 
-        var gridModelMatrix = Matrix4x4.Translate(_volumeBounds.min) * Matrix4x4.Scale(_volumeBounds.size / _volumeResolution);
-        _gridModelViewProjMatrices[0] = _viewProjMatrices[0] * gridModelMatrix;
-        _gridModelViewProjMatrices[1] = _viewProjMatrices[1] * gridModelMatrix;
-        _gridModelViewProjMatrices[2] = _viewProjMatrices[2] * gridModelMatrix;
+        _viewProjMatrices[0] = _orthoProjectionMatrix * _viewMatrices[0];
+        _viewProjMatrices[1] = _orthoProjectionMatrix * _viewMatrices[1];
+        _viewProjMatrices[2] = _orthoProjectionMatrix * _viewMatrices[2];
+
+        _gridModelMatrix = Matrix4x4.Translate(_volumeBounds.min) * Matrix4x4.Scale(_volumeBounds.size / _volumeResolution);
+        _gridModelViewProjMatrices[0] = _viewProjMatrices[0] * _gridModelMatrix;
+        _gridModelViewProjMatrices[1] = _viewProjMatrices[1] * _gridModelMatrix;
+        _gridModelViewProjMatrices[2] = _viewProjMatrices[2] * _gridModelMatrix;
       }
-
 
       /* -----------------------------------------------------------------------
        * Setup Distance Field Objects
@@ -207,7 +211,6 @@ namespace AnSim.Runtime
       _distanceFieldObjectDataBuffer = new ComputeBuffer(_distanceFieldObjects.Count, DistanceFieldObjectMatrices.GetSize(), ComputeBufferType.Structured);
       UpdateDistanceFieldObjectsData();
 
-
       /* -----------------------------------------------------------------------
        * Setup Fragment Counting Phase
        * -----------------------------------------------------------------------
@@ -224,7 +227,6 @@ namespace AnSim.Runtime
       _cmdBuffer1.ClearRandomWriteTargets();
       _cmdBuffer1.SetRandomWriteTarget(2, _pixelFragmentCounterBuffer);
       _cmdBuffer1.SetGlobalBuffer(_distanceFieldObjectDataBufferNameId, _distanceFieldObjectDataBuffer);
-      //_cmdBuffer1.ran
 
       // Draw every object 
       foreach (var distanceFieldObject in _distanceFieldObjects)
@@ -232,11 +234,11 @@ namespace AnSim.Runtime
         for (int i = 0; i < distanceFieldObject.sharedMesh.subMeshCount; i++)
         {
           _cmdBuffer1.DrawMeshInstancedIndirect(distanceFieldObject.sharedMesh, i, _simulationResources.materials.fragmentCountingMaterial, -1, distanceFieldObject.argumentBuffers[i], 0, distanceFieldObject.materialPropertyBlock);
-
         }
       }
 
       _cmdBuffer1.ClearRandomWriteTargets(); // !Important, otherwise changes in _pixelFragmentCounterBuffer are not visible to computebuffer 
+
 
       /* -----------------------------------------------------------------------
        * Setup Prefix Sum Phase
@@ -246,23 +248,23 @@ namespace AnSim.Runtime
       _prefixSumAuxBuffer = new ComputeBuffer(_totalPixelCount, sizeof(uint), ComputeBufferType.Structured);
       _prefixSumResultBuffer = new ComputeBuffer(_totalPixelCount, sizeof(uint), ComputeBufferType.Structured);
 
-      var prefixSumCs = _simulationResources.shaders.prefixSumCompute;
+      var prefixSumCs = _simulationResources.shaders.prefixSumComputeShader;
 
       // ScanInBucketInclusive
-      var prefixSumScanInBucketInclusiveIndex = _simulationResources.shaders.prefixSumScanInBucketInclusive.index;
+      var prefixSumScanInBucketInclusiveIndex = _simulationResources.shaders.prefixSumScanInBucketInclusiveKernelData.index;
 
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanInBucketInclusiveIndex, _prefixSumInputBufferNameId, _pixelFragmentCounterBuffer);
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanInBucketInclusiveIndex, _prefixSumResultBufferNameId, _prefixSumResultBuffer);
       _cmdBuffer1.DispatchCompute(prefixSumCs, prefixSumScanInBucketInclusiveIndex, _threadGroupCount, 1, 1);
 
       // ScanBucketResult
-      var prefixSumScanBucketResultIndex = _simulationResources.shaders.prefixSumScanBucketResult.index;
+      var prefixSumScanBucketResultIndex = _simulationResources.shaders.prefixSumScanBucketResultKernelData.index;
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanBucketResultIndex, _prefixSumInputBufferNameId, _prefixSumResultBuffer);
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanBucketResultIndex, _prefixSumResultBufferNameId, _prefixSumAuxBuffer);
       _cmdBuffer1.DispatchCompute(prefixSumCs, prefixSumScanBucketResultIndex, 1, 1, 1);
 
       // ScanAddBucketResult
-      var prefixSumScanAddBucketResultIndex = _simulationResources.shaders.prefixSumScanAddBucketResult.index;
+      var prefixSumScanAddBucketResultIndex = _simulationResources.shaders.prefixSumScanAddBucketResultKernelData.index;
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanAddBucketResultIndex, _prefixSumInputBufferNameId, _prefixSumAuxBuffer);
       _cmdBuffer1.SetComputeBufferParam(prefixSumCs, prefixSumScanAddBucketResultIndex, _prefixSumResultBufferNameId, _prefixSumResultBuffer);
       _cmdBuffer1.DispatchCompute(prefixSumCs, prefixSumScanAddBucketResultIndex, _threadGroupCount, 1, 1);
@@ -273,7 +275,7 @@ namespace AnSim.Runtime
        * Setup DistanceField 3D RenderTexture
        * -----------------------------------------------------------------------
        */
-      if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RFloat))
+      if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RFloat) || !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBFloat))
       {
         Debug.LogError("Requested Texture Format not supported by device.");
       }
@@ -297,7 +299,27 @@ namespace AnSim.Runtime
         bindMS = false,
 
       });
+      DistanceField3DTexture.wrapMode = TextureWrapMode.Clamp;
       DistanceField3DTexture.Create();
+
+      DistanceGradientField3DTexture = new RenderTexture(new RenderTextureDescriptor
+      {
+        autoGenerateMips = false,
+        enableRandomWrite = true,
+        useMipMap = false,
+        depthBufferBits = 0,
+        width = _volumeResolution,
+        height = _volumeResolution,
+        volumeDepth = _volumeResolution,
+        colorFormat = RenderTextureFormat.ARGBFloat,
+        graphicsFormat = GraphicsFormat.R32G32B32A32_SFloat,
+        msaaSamples = 1,
+        dimension = TextureDimension.Tex3D,
+        bindMS = false,
+
+      });
+      DistanceGradientField3DTexture.wrapMode = TextureWrapMode.Clamp;
+      DistanceGradientField3DTexture.Create();
 
       /* -----------------------------------------------------------------------
        * Setup Dynamic Depth Buffer
@@ -306,12 +328,10 @@ namespace AnSim.Runtime
        */
       _cmdBuffer1.RequestAsyncReadback(_prefixSumResultBuffer, (AsyncGPUReadbackRequest readback) =>
       {
-        //Debug.Log("PrefixSumResult Readback called");
         if (!readback.done || readback.hasError)
         {
           Debug.LogError("There was an error with GPU Readback.");
         }
-
         if (readback.GetData<uint>().Length == 0)
         {
           Debug.LogError("There needs to be at least one object within the simulation area.");
@@ -335,9 +355,9 @@ namespace AnSim.Runtime
           _fragmentCounterValue = fragmentCount;
 
           /* -----------------------------------------------------------------------
-       * Setup CommandBuffer2 to construct DynamicDepthBuffer
-       * -----------------------------------------------------------------------
-       */
+           * Setup CommandBuffer2 to construct DynamicDepthBuffer
+           * -----------------------------------------------------------------------
+           */
           _cmdBuffer2.Clear();
           _cmdBuffer2.SetGlobalInt("pixelCount", _pixelCount);
           _cmdBuffer2.SetGlobalInt("volumeResolution", _volumeResolution);
@@ -384,62 +404,125 @@ namespace AnSim.Runtime
           _cmdBuffer2.SetComputeTextureParam(distanceFieldConstructionCs, distanceFieldConstructionKernel, _distanceFieldTextureNameId, DistanceField3DTexture);
 
           _cmdBuffer2.DispatchCompute(distanceFieldConstructionCs, distanceFieldConstructionKernel, 1, _volumeResolution, _volumeResolution);
-        }
 
-        // Execute DynamicDepthBuffer and DistanceField construction.
-        Graphics.ExecuteCommandBuffer(_cmdBuffer2);
+          // Create Gradients
+          var distanceToGradientFieldCs = _simulationResources.shaders.distanceToGradientFieldComputeShader;
+          var distanceToGradientFieldKernelIndex = _simulationResources.shaders.distanceToGradientKernelData.index;
 
-        /*
-        _cmdBuffer2.RequestAsyncReadback(_distanceField3DTexture, (AsyncGPUReadbackRequest obj) =>
-        {
-          Debug.Log("DistanceFieldTexture Readback called");
-          for (int layer = 0; layer < obj.depth; layer++)
+          _cmdBuffer2.SetComputeIntParam(distanceToGradientFieldCs, "volumeResolution", _volumeResolution);
+
+          _cmdBuffer2.SetComputeTextureParam(distanceToGradientFieldCs, distanceToGradientFieldKernelIndex, _distanceFieldTextureNameId, DistanceField3DTexture);
+          _cmdBuffer2.SetComputeTextureParam(distanceToGradientFieldCs, distanceToGradientFieldKernelIndex, _distanceGradientFieldTextureNameId, DistanceGradientField3DTexture);
+
+          int threadGroupCountX = (int)(_volumeResolution / _simulationResources.shaders.distanceToGradientKernelData.numThreadsX);
+          int threadGroupCountY = (int)(_volumeResolution / _simulationResources.shaders.distanceToGradientKernelData.numThreadsY);
+          int threadGroupCountZ = (int)(_volumeResolution / _simulationResources.shaders.distanceToGradientKernelData.numThreadsZ);
+
+          _cmdBuffer2.DispatchCompute(distanceToGradientFieldCs, distanceToGradientFieldKernelIndex, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+
+#if UNITY_EDITOR
+          _cmdBuffer2.RequestAsyncReadback(DistanceGradientField3DTexture, (AsyncGPUReadbackRequest obj) =>
           {
-            var distanceFieldLayerData = obj.GetData<float>(layer);
-            string debugprint = "";
-            for (int x = 0; x < obj.width * obj.height; x++)
+            _distanceGradientFieldData = new Vector4[obj.width, obj.height, obj.depth];
+            for (int z = 0; z < obj.depth; z++)
             {
-              if (x % obj.width == 0) debugprint += "\n";
-
-              if (distanceFieldLayerData[x] >= 0.0f || Mathf.Approximately(distanceFieldLayerData[x], 0.0f))
+              var distanceFieldLayerData = obj.GetData<Vector4>(z);
+              int flatIndex = 0;
+              for (int x = 0; x < obj.width; x++)
               {
-                debugprint += " " + distanceFieldLayerData[x].ToString("0.00") + "|";
-              } else if (Mathf.Approximately(distanceFieldLayerData[x], -1.0f))
-              {
-                debugprint += "-----" + "|";
-              } else
-              {
-                debugprint += distanceFieldLayerData[x].ToString("0.00") + "|";
+                for (int y = 0; y < obj.height; y++)
+                {
+                  _distanceGradientFieldData[x, y, z] = distanceFieldLayerData[flatIndex];
+                  flatIndex++;
+                }
               }
             }
-            Debug.Log("Layer #"+layer);
-            Debug.Log(debugprint);
-          }
-
-          Debug.Log("DistanceFieldTexture Readback finished");
-        });*/
-
-
-
-        //Test if prefixSum Result is correct
-        /*var prev = 0u;
-        foreach (var u in data)
-        {
-          if (u < prev)
-          {
-            Debug.Log("Not working");
-          }
-
-          prev = u;
-        }*/
-        //Debug.Log("PrefixSumResult Readback finished");
+          });
+        }
+#endif
+        // Execute DynamicDepthBuffer and DistanceField construction.
+        Graphics.ExecuteCommandBuffer(_cmdBuffer2);
+        // Now cmdbuffer1 may be rerun
+        _shouldRunCmdBuffer1 = true;
       });
     }
 
     public void ExecutePipeline()
     {
-      Graphics.ExecuteCommandBuffer(_cmdBuffer1);
+      if (_shouldRunCmdBuffer1) Graphics.ExecuteCommandBuffer(_cmdBuffer1);
+      _shouldRunCmdBuffer1 = false;
     }
 
+    public void DrawGizmos(int instanceId, Vector3Int point, bool showInstancedDepthTexture, bool drawViewingPlanes, bool drawTransformedMeshes, bool showDistanceFieldInformation, bool toggleVectorDistanceGizmo)
+    {
+#if UNITY_EDITOR
+      instanceId = Mathf.Clamp(instanceId, 0, ViewDirectionCount - 1);
+      if (drawTransformedMeshes)
+      {
+        foreach (var fieldObject in _distanceFieldObjects)
+        {
+          for (int i = 0; i < fieldObject.sharedMesh.subMeshCount; i++)
+          {
+            Gizmos.matrix = _viewMatrices[instanceId] * fieldObject.transform.localToWorldMatrix;
+            Gizmos.DrawMesh(fieldObject.sharedMesh, i, Vector3.zero);
+          }
+        }
+      }
+
+      if (drawViewingPlanes)
+      {
+        Gizmos.matrix = _viewMatrices[instanceId];
+        Gizmos.color = instanceId == 0 ? Color.red : (instanceId == 1) ? Color.green : Color.blue;
+
+        Gizmos.DrawWireCube(_volumeBounds.center - new Vector3(0, 0, _volumeBounds.extents.z), new Vector3(_volumeBounds.size.x, _volumeBounds.size.y, 1));
+      }
+
+      if (_volumeResolution >= 64)
+      {
+        Debug.LogWarning("Volume Resolution is too high to show distance Field Information.");
+        showDistanceFieldInformation = false;
+      }
+
+      if (showDistanceFieldInformation)
+      {
+        Gizmos.matrix = _gridModelMatrix;
+        for (int x = 0; x < _volumeResolution; x++)
+        {
+          float colorx = 1.0f * x / _volumeResolution;
+          for (int y = 0; y < _volumeResolution; y++)
+          {
+            float colory = 1.0f * y / _volumeResolution;
+            for (int z = 0; z < _volumeResolution; z++)
+            {
+              float depth = _distanceGradientFieldData[x, y, z].w;
+              if (Mathf.Approximately(depth, -1.0f))
+              {
+                continue;
+              }
+
+              if (toggleVectorDistanceGizmo)
+              {
+                var color = new Color(_distanceGradientFieldData[x, y, z].x / 2 + 0.5f, _distanceGradientFieldData[x, y, z].y / 2 + 0.5f, _distanceGradientFieldData[x, y, z].z / 2 + 0.5f, 1);
+                Gizmos.color = color;
+                Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), 0.1f);
+                Gizmos.DrawRay(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), _distanceGradientFieldData[x, y, z]);
+              }
+              else
+              {
+                Gizmos.color = new Color(colorx, colory, 1.0f * z / _volumeResolution);
+                Gizmos.DrawSphere(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), depth);
+              }
+
+            }
+          }
+        }
+      }
+
+      if (showInstancedDepthTexture)
+      {
+        Gizmos.DrawGUITexture(new Rect(Vector2.zero, Vector2.one * _volumeBounds.size.x), _dummyRenderTarget);
+      }
+#endif
+    }
   }
 }
