@@ -43,6 +43,15 @@ namespace AnSim.Runtime
         clearBufferUintComputeShader =  
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "ClearBufferUint.compute"),
+        uniformGridConstructionComputeShader =
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "UniformGridConstruction.compute"),
+        radixSortComputeShader =
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "RadixSort.compute"),
+        clearBufferParticleHashComputeShader =
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "ClearBufferParticleHash.compute"),
       };
 
       shaders.swarmSimulationMaskedResetKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MaskedReset");
@@ -58,6 +67,10 @@ namespace AnSim.Runtime
       shaders.prefixSumScanAddBucketResult = new CsKernelData(shaders.prefixSumCompute, "ScanAddBucketResult");
 
       shaders.clearBufferUintKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "Clear");
+      shaders.clearBufferUintUniformGridKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "ClearForGrid");
+      shaders.clearBufferParticleHashKernelData = new CsKernelData(shaders.clearBufferParticleHashComputeShader, "Clear");
+
+      shaders.uniformGridFindCellStartKernelData = new CsKernelData(shaders.uniformGridConstructionComputeShader, "FindCellStart");
 
       materials = new MaterialResources()
       {
@@ -83,6 +96,7 @@ namespace AnSim.Runtime
       public ComputeShader distanceFieldConstructionComputeShader;
       public ComputeShader prefixSumCompute;
       public ComputeShader clearBufferUintComputeShader;
+      public ComputeShader clearBufferParticleHashComputeShader;
 
       public CsKernelData prefixSumScanInBucketInclusive;
       public CsKernelData prefixSumScanInBucketExclusive;
@@ -90,6 +104,13 @@ namespace AnSim.Runtime
       public CsKernelData prefixSumScanAddBucketResult;
       public CsKernelData distanceFieldConstructionKernelData;
       public CsKernelData clearBufferUintKernelData;
+      public CsKernelData clearBufferUintUniformGridKernelData;
+      public CsKernelData clearBufferParticleHashKernelData;
+
+      public ComputeShader uniformGridConstructionComputeShader;
+      public CsKernelData uniformGridFindCellStartKernelData;
+
+      public ComputeShader radixSortComputeShader;
     }
 
     [Serializable]

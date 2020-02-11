@@ -158,4 +158,12 @@ namespace AnSim.Runtime
     public static int GetSize() => 3 * (4 * 4) * sizeof(float);
   }
 
+  public struct ParticleHashData
+  {
+    public Vector3 particlePos;
+    public uint cellId;
+
+    public static int GetSize() => (3 + 1) * sizeof(float);
+  }
+
 }

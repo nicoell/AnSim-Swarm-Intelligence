@@ -1,0 +1,30 @@
+﻿#pragma kernel FindCellStart
+
+#define NUM_THREADS 256
+
+#include "Definitions/Structs.hlsl"
+
+// Buffer
+RWStructuredBuffer<ParticleHashData> ParticleHashBuffer;
+RWStructuredBuffer<uint> CellStartBuffer;
+
+// find start of each cell in sorted particle list by comparing with previous hash value
+[numthreads(NUM_THREADS, 1, 1)]
+void FindCellStart(uint3 id : SV_DispatchThreadID)
+{
+  int index = id.x; //TODO: Check if correct index is calculated. Is this index = (group.x * NUM_THREADS) + groupIndex ?
+
+  uint cell = ParticleHashBuffer[index].cellId;
+
+  if (index > 0)
+  {
+    if (cell != ParticleHashBuffer[index - 1].cellId)
+    {
+      CellStartBuffer[cell] = index;
+    }
+  }
+  else
+  {
+    CellStartBuffer[cell] = index;
+  }
+}

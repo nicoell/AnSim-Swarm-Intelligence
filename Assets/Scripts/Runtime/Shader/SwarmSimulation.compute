@@ -26,10 +26,21 @@ float IsPositiveAsFloat(float x);
 float IsZeroOrNegativeAsFloat(float x);
 bool IsPositive(float x);
 float NormDist_0_1(float u1, float u2);
+int3 calcGridPos(float3 p);
+uint calcGridAddress(int3 gridPos);
 
 StructuredBuffer<uint> SwarmIndexBuffer;
 RWStructuredBuffer<SwarmData> SwarmBuffer;
 RWStructuredBuffer<SwarmParticleData> SwarmParticleBuffer;
+
+RWStructuredBuffer<ParticleHashData> TempParticleHashBuffer;
+StructuredBuffer<ParticleHashData> ParticleHashBuffer;
+StructuredBuffer<uint> CellStartBuffer;
+
+uint3 GridSize;
+float3 CellSize;
+float3 WorldOrigin;
+int SwarmOffset;
 
 Texture3D<float> DistanceFieldTexture;
 SamplerState samplerDistanceFieldTexture;
@@ -58,7 +69,7 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   SwarmParticleData particle = SwarmParticleBuffer[particleBufferIndex];
   // Get random values.
   float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
-  
+    
   /* -----------------------------------------------------------------------
    * Particle Health Update
    * -----------------------------------------------------------------------
@@ -312,10 +323,23 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   
     gsLocalBestAndFitness[groupIndex] = float4(particle.localBest, particle.fitness);
   }
-    //TODO: Sinnvoll mit if(isAlive)? Hier muss sowieso auf alle Threads gewartet werden für global best. Sync muss auch außerhalb von if() liegen,
-    //da es sonst eventuell nicht erreicht wird von Threads
+  
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
+  /* -----------------------------------------------------------------------
+   * Execute 1.Pass of UniformGrid Construction Algorithm (CalcHash-Funktion)
+   * -----------------------------------------------------------------------
+   * 
+   */
+  // get address in grid
+  int3 gridPos = calcGridPos(particle.position);
+  uint gridAddress = calcGridAddress(gridPos);
 
+  ParticleHashData gridData;
+  gridData.cellId = gridAddress;
+  gridData.particlePos = particle.position;
+  // store grid hash and particle index
+  TempParticleHashBuffer[SwarmOffset + particleBufferIndex] = gridData;
+  
   /* -----------------------------------------------------------------------
    * Write results back to buffer
    * -----------------------------------------------------------------------
@@ -519,5 +543,24 @@ inline bool IsPositive(float x)
 inline float NormDist_0_1(float u1, float u2)
 {
   return sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265f * u2);
+}
+
+// calculate position in uniform grid
+inline int3 calcGridPos(float3 p)
+{
+  int3 gridPos;
+  gridPos.x = floor((p.x - WorldOrigin.x) / CellSize.x);
+  gridPos.y = floor((p.y - WorldOrigin.y) / CellSize.y);
+  gridPos.z = floor((p.z - WorldOrigin.z) / CellSize.z);
+  return gridPos;
+}
+
+// calculate address in grid from position (clamping to edges)
+inline uint calcGridAddress(int3 gridPos)
+{
+  gridPos.x = max(0, min(gridPos.x, GridSize.x - 1));
+  gridPos.y = max(0, min(gridPos.y, GridSize.y - 1));
+  gridPos.z = max(0, min(gridPos.z, GridSize.z - 1));
+  return ((gridPos.z * GridSize.y) * GridSize.x) + (gridPos.y * GridSize.x) + gridPos.x;
 }
 

@@ -186,15 +186,15 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!21 &475170347
+--- !u!21 &561296401
 Material:
   serializedVersion: 6
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/FragmentCounting
-  m_Shader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad, type: 3}
+  m_Name: Custom/InstancedSwarmRendering
+  m_Shader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a, type: 3}
   m_ShaderKeywords: 
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -273,27 +273,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!21 &667869131
-Material:
-  serializedVersion: 6
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/DynamicDepthBufferConstruction
-  m_Shader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c, type: 3}
-  m_ShaderKeywords: 
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs: []
-    m_Floats: []
-    m_Colors: []
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -414,7 +393,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db5ec4bb7c9fba247b358dc81fbfb43c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  simulationResources: {fileID: 1103388523}
+  simulationResources: {fileID: 1388589828}
   updateEveryFrame: 0
 --- !u!4 &852724879
 Transform:
@@ -430,6 +409,27 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!21 &953428771
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Custom/DynamicDepthBufferConstruction
+  m_Shader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -513,7 +513,28 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1103388523
+--- !u!21 &1021792237
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Custom/FragmentCounting
+  m_Shader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
+--- !u!114 &1388589828
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -557,6 +578,8 @@ MonoBehaviour:
     prefixSumCompute: {fileID: 7200000, guid: e55887909730bd74f9ddf3a52987997a, type: 3}
     clearBufferUintComputeShader: {fileID: 7200000, guid: e69288c5a5faef443b300c1dc66f682f,
       type: 3}
+    clearBufferParticleHashComputeShader: {fileID: 7200000, guid: e89acdcb4ab5acc439cb4c81be9e7b56,
+      type: 3}
     prefixSumScanInBucketInclusive:
       index: 0
       name: ScanInBucketInclusive
@@ -593,31 +616,32 @@ MonoBehaviour:
       numThreadsX: 128
       numThreadsY: 1
       numThreadsZ: 1
+    clearBufferUintUniformGridKernelData:
+      index: 1
+      name: ClearForGrid
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    clearBufferParticleHashKernelData:
+      index: 0
+      name: Clear
+      numThreadsX: 256
+      numThreadsY: 1
+      numThreadsZ: 1
+    uniformGridConstructionComputeShader: {fileID: 7200000, guid: da0a33daadf7bcd479d5997ea30ad3f4,
+      type: 3}
+    uniformGridFindCellStartKernelData:
+      index: 0
+      name: FindCellStart
+      numThreadsX: 256
+      numThreadsY: 1
+      numThreadsZ: 1
+    radixSortComputeShader: {fileID: 7200000, guid: 1097c10587d0d9548b3141b3be9d3c42,
+      type: 3}
   materials:
-    swarmRenderMaterial: {fileID: 1103683232}
-    fragmentCountingMaterial: {fileID: 475170347}
-    dynamicDepthBufferConstructionMaterial: {fileID: 667869131}
---- !u!21 &1103683232
-Material:
-  serializedVersion: 6
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/InstancedSwarmRendering
-  m_Shader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a, type: 3}
-  m_ShaderKeywords: 
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs: []
-    m_Floats: []
-    m_Colors: []
+    swarmRenderMaterial: {fileID: 561296401}
+    fragmentCountingMaterial: {fileID: 1021792237}
+    dynamicDepthBufferConstructionMaterial: {fileID: 953428771}
 --- !u!1 &1738989243
 GameObject:
   m_ObjectHideFlags: 0

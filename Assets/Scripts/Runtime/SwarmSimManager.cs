@@ -15,9 +15,11 @@ namespace AnSim.Runtime
 
     [Header("DistanceFieldVolume")] 
     public bool updateEveryFrame = false;
-    
+
     private DistanceFieldVolume _distanceFieldVolume;
     private readonly int _distanceFieldTextureNameId = Shader.PropertyToID("DistanceFieldTexture");
+
+    private UniformGrid _uniformGrid;
 
     private List<Swarm> _swarms;
     private Bounds _simulationBounds;
@@ -27,6 +29,8 @@ namespace AnSim.Runtime
     private SwarmSimulationUniforms[] _swarmSimulationUniforms;
     private int _swarmSimulationUniformsSize;
 
+    List<int> _offsetsSwarms;// Contains the offset of each swarm, so we can acces each particle in a linear buffer in uniform grid
+
     private void Awake()
     {
       _swarms = new List<Swarm>(); //Init Swarm list
@@ -34,6 +38,10 @@ namespace AnSim.Runtime
       _simulationBounds = new Bounds(transform.position + 0.5f * transform.localScale, transform.localScale);
 
       _distanceFieldVolume = new DistanceFieldVolume(simulationResources, _simulationBounds);
+
+      _uniformGrid = new UniformGrid(simulationResources, _simulationBounds);
+
+      _offsetsSwarms = new List<int>(); 
 
       // Init SwarmSimulationUniform Buffer and data
       _swarmSimulationUniformsSize =
@@ -46,6 +54,8 @@ namespace AnSim.Runtime
 
     private void Start()
     {
+      int totalNumberParticles = 0;
+
       _distanceFieldVolume.SetupPipeline();
       // Set necessary resources to simulation compute shader + kernels
       simulationResources.shaders.swarmSimulationComputeShader.SetMatrix("OrthoProjMatrix", _distanceFieldVolume.OrthoProjectionMatrix);
@@ -54,7 +64,7 @@ namespace AnSim.Runtime
       simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
       simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index,  _distanceFieldTextureNameId, _distanceFieldVolume.DistanceField3DTexture);
 
-      _distanceFieldVolume.ExecutePipeline();
+      _distanceFieldVolume.ExecutePipeline();      
 
       #region Init all Swarms
       //Update global Swarm Simulation Uniforms
@@ -70,8 +80,26 @@ namespace AnSim.Runtime
       foreach (var swarm in _swarms)
       {
         swarm.SetupSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData);
+
+        _offsetsSwarms.Add(totalNumberParticles);
+        totalNumberParticles += swarm.GetMaxSwarmParticleCount();
       }
       #endregion
+
+      // Init Uniform Grid
+      //TODO: Setup Uniform to give the offsetsSwarms to the SwarmSimulation.compute
+      _uniformGrid.Init(totalNumberParticles, new Vector3Int(64, 64, 64));
+      
+      //Set global variables in swarmSimulation.compute needed by uniform grid 1st Pass and final usage
+      simulationResources.shaders.swarmSimulationComputeShader.SetVector("GridSize", _uniformGrid.GridSize);// uint3
+      simulationResources.shaders.swarmSimulationComputeShader.SetVector("CellSize", _uniformGrid.CellSize);// float3
+      simulationResources.shaders.swarmSimulationComputeShader.SetVector("WorldOrigin", _uniformGrid.WorldOrigin);// float3
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index, _uniformGrid.TempParticleHashBufferNameId, _uniformGrid.TempParticleHashBuffer);
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index, _uniformGrid.TempParticleHashBufferNameId, _uniformGrid.TempParticleHashBuffer);
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index, _uniformGrid.ParticleHashBufferNameId, _uniformGrid.ParticleHashBuffer);
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index, _uniformGrid.ParticleHashBufferNameId, _uniformGrid.ParticleHashBuffer);
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationSlaveUpdateKernelData.index, _uniformGrid.CellStartBufferNameId, _uniformGrid.CellStartBuffer);
+      simulationResources.shaders.swarmSimulationComputeShader.SetBuffer(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index, _uniformGrid.CellStartBufferNameId, _uniformGrid.CellStartBuffer);
     }
 
     private void Update()
@@ -97,17 +125,20 @@ namespace AnSim.Runtime
 
       _swarms.Shuffle(); //Shuffle swarms to reduce disadvantaging any swarm in reaching a target
 
-      foreach (var swarm in _swarms)
+      for(int i = 0; i < _swarms.Count; i++)
       {
-        swarm.RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);
+        simulationResources.shaders.swarmSimulationComputeShader.SetInt("SwarmOffset", _offsetsSwarms[i]);
+        _swarms[i].RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);
       }
 
       foreach (var swarm in _swarms)
       {
         swarm.Render(simulationResources.materials.swarmRenderMaterial, _simulationBounds);
       }
-
       #endregion
+
+      // Update UniformGrid Pass 2+3
+      _uniformGrid.Update();
     }
 
 #if UNITY_EDITOR
