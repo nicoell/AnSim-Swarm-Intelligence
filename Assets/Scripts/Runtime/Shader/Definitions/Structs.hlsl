@@ -8,6 +8,7 @@ struct SwarmParticleData
   float health;
   float3 localBest; //best solution of this particle
   float fitness; //rating of the localBest
+  float3x3 rotationMatrix;
 };
 
 struct SwarmData

@@ -13,7 +13,6 @@
 #endif
 
 #define SWARM_SIZE 64
-#define MAX_HEALTH 1
 
 #include "Definitions/Structs.hlsl"
 #include "Utils/Random.hlsl"
@@ -26,6 +25,7 @@ float IsPositiveAsFloat(float x);
 float IsZeroOrNegativeAsFloat(float x);
 bool IsPositive(float x);
 float NormDist_0_1(float u1, float u2);
+float3x3 GetRotationMatrixFromDirection(float3 normalizedDir);
 
 StructuredBuffer<uint> SwarmIndexBuffer;
 RWStructuredBuffer<SwarmData> SwarmBuffer;
@@ -46,6 +46,8 @@ RWStructuredBuffer<uint> SwarmCounterBuffer;
 groupshared uint gsIndexToGlobalBest;
 groupshared uint gsParticlesAlive;
 
+float4 explosionPosRadius;
+
 #ifdef MASTER_SIM
 groupshared float4 gsSlaveGlobalBestAndFitness;
 int numberOfSwarmsToRevive;
@@ -56,6 +58,22 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   // Read Swarm and Particle Data from Buffers
   SwarmData swarm = SwarmBuffer[swarmBufferIndex];
   SwarmParticleData originalParticle = SwarmParticleBuffer[particleBufferIndex];
+
+  /* -----------------------------------------------------------------------
+   * Particle Health Update
+   * -----------------------------------------------------------------------
+   *  - TODO: Collision handling etc.
+   */
+  
+  float distanceToExplosion = length(originalParticle.position - explosionPosRadius.xyz);
+  if (distanceToExplosion < explosionPosRadius.w)
+  {
+    originalParticle.health -= 0.5 + (explosionPosRadius.w - distanceToExplosion) / explosionPosRadius.w;
+  }
+  
+  bool isAlive = IsPositive(originalParticle.health); // 1 when alive, 0 when dead
+  float aliveMultiplicator = IsPositiveAsFloat(originalParticle.health); // 1 when alive, 0 when dead
+  float deadMultiplicator = IsZeroOrNegativeAsFloat(originalParticle.health); // 0 when alive, 1 when dead
   
   /* -----------------------------------------------------------------------
    * Classic PSO Algorithm
@@ -63,31 +81,13 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
    */
   // Copy of input particle to be simulated with classic PSO algorithm
   SwarmParticleData classicParticle = originalParticle;
-  
   // Get random values.
   float3 rand = hash32(float2(particleBufferIndex, timeSinceStart));
-  
-  /* -----------------------------------------------------------------------
-   * Particle Health Update
-   * -----------------------------------------------------------------------
-   *  - TODO: Collision handling etc.
-   */
-  
-  //DEBUG Only
-  if (classicParticle.fitness > 500.0)
-    classicParticle.health -= 0.0005;
-  else
-    classicParticle.health += 0.0005;
-  
-  bool isAlive = IsPositive(classicParticle.health); // 1 when alive, 0 when dead
-  float aliveMultiplicator = IsPositiveAsFloat(classicParticle.health); // 1 when alive, 0 when dead
-  float deadMultiplicator = IsZeroOrNegativeAsFloat(classicParticle.health); // 0 when alive, 1 when dead
   
   /* -----------------------------------------------------------------------
    * Particle Velocity Update
    * -----------------------------------------------------------------------
    */
-  
   // Normalize but prevent NaN
   float3 dirToLocalBest = (classicParticle.localBest - classicParticle.position);
   dirToLocalBest = any(dirToLocalBest != 0) ? normalize(dirToLocalBest) : 0;
@@ -179,21 +179,19 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     collisionMalus = distanceToWorld + worldDodgeBias;
     distanceToWorld = 0.0;
   }
-
-  float3 normalizedVelocity = (classicParticle.velocity);
-  
+    
   float dodgeFactor = 1.0 - saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
-  dodgeFactor *= max(dot(normalizedVelocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
+  dodgeFactor *= max(dot(classicParticle.velocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
 
   float3 dodgeDirection = dodgeFactor * cross(normalize(target - classicParticle.position), -gradientDepthToWorld.xyz);
 
   //classicParticle.velocity += dodgeDirection2;
-  //classicParticle.position += dodgeDirection2;
+  //classicParticle.position += timeScale * dodgeDirection2;
   
   float speed = length(classicParticle.velocity);
   float3 velocityChange = classicParticle.velocity - normalize(classicParticle.velocity + dodgeDirection) * speed;
   classicParticle.velocity += velocityChange;
-  classicParticle.position += velocityChange;
+  classicParticle.position += timeScale * velocityChange;
   
   
   /* -----------------------------------------------------------------------
@@ -320,21 +318,18 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
         distanceToWorld = 0.0;
       }
       
-      
-      float3 normalizedVelocity = (replica.velocity);
-      
       float dodgeFactor = 1.0 - saturate(-distanceToWorld / worldDodgeBias); //subtract biasedDistanceToWorld which is < 1.0 if environment is within its "viewing range"
-      dodgeFactor *= max(dot(normalizedVelocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
+      dodgeFactor *= max(dot(replica.velocity, gradientDepthToWorld.xyz), 0.0); //if particle moves in direction of world obstacle, we need to dodge, also if it is fast
 
       float3 dodgeDirection2 = dodgeFactor * cross(normalize(target - replica.position), -gradientDepthToWorld.xyz);
 
       //replica.velocity += dodgeDirection2;
-      //replica.position += dodgeDirection2;
+      //replica.position += timeScale * dodgeDirection2;
       
       float speed = length(replica.velocity);
       float3 velocityChange = replica.velocity - normalize(replica.velocity + dodgeDirection2) * speed;
       replica.velocity += velocityChange;
-      replica.position += velocityChange;
+      replica.position += timeScale * velocityChange;
   
       // Update fitness
       // Fitness is evaluated in terms of quadratic distance to target.
@@ -361,6 +356,12 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
     //da es sonst eventuell nicht erreicht wird von Threads
   GroupMemoryBarrierWithGroupSync(); //AllMemoryBarrierWithGroupSync();
 
+  /* -----------------------------------------------------------------------
+   * Update/Init RotationMatrix
+   * -----------------------------------------------------------------------
+   */
+  bestParticle.rotationMatrix = GetRotationMatrixFromDirection(normalize(bestParticle.velocity));
+  
   /* -----------------------------------------------------------------------
    * Write results back to buffer
    * -----------------------------------------------------------------------
@@ -472,7 +473,7 @@ void MaskedReset(uint3 group : SV_GroupID, uint groupIndex : SV_GroupIndex, uint
   {
     // If particle was dead, set bool that is was revived
     particleWasRevived = (SwarmParticleBuffer[particleBufferIndex].health <= 0.0);
-    particle.health = MAX_HEALTH;
+    particle.health = reviveHealthAmount;
   }
   
   if (enablePositionReset && ((resetOnlyIfRevived && particleWasRevived) || !resetOnlyIfRevived))
@@ -490,6 +491,12 @@ void MaskedReset(uint3 group : SV_GroupID, uint groupIndex : SV_GroupIndex, uint
   float aliveMultiplicator = IsPositiveAsFloat(particle.health); // 1 when alive, 0 when dead
   float deadMultiplicator = IsZeroOrNegativeAsFloat(particle.health); // 0 when alive, 1 when dead
 
+  /* -----------------------------------------------------------------------
+   * Update/Init RotationMatrix
+   * -----------------------------------------------------------------------
+   */
+  particle.rotationMatrix = GetRotationMatrixFromDirection(normalize(particle.velocity));
+  
   /* -----------------------------------------------------------------------
    * Update/Init particle fitness
    * -----------------------------------------------------------------------
@@ -516,7 +523,7 @@ void MaskedReset(uint3 group : SV_GroupID, uint groupIndex : SV_GroupIndex, uint
     swarm.fitness = gsLocalBestAndFitness[indexToBest].w;
     
     // Update particles alive
-    if (reviveParticles)
+    if (reviveParticles && reviveHealthAmount > 0)
       swarm.particlesAlive = SWARM_SIZE;
     
     SwarmBuffer[swarmBufferIndex] = swarm; // Write result
@@ -570,3 +577,15 @@ inline float NormDist_0_1(float u1, float u2)
   return sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265f * u2);
 }
 
+inline float3x3 GetRotationMatrixFromDirection(float3 normalizedDir)
+{
+  const float3 up = normalize(float3(0, 1, 0));
+  float3 temp = normalize(cross(up, normalizedDir));
+  float3x3 ret =
+  {
+    temp,
+    cross(normalizedDir, temp),
+    normalizedDir
+  };
+  return transpose(ret);
+}

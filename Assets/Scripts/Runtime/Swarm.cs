@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using AnSim.Runtime.Utils;
 using Unity.Collections;
@@ -7,11 +8,25 @@ using UnityEngine.Rendering;
 
 namespace AnSim.Runtime
 {
+  public enum SwarmType : ushort
+  {
+    FishSwarm = 0,
+    KamikazeAttackSwarm = 1
+  }
+
+  public enum SwarmTarget : ushort
+  {
+    SwarmBase = 0,
+    Food = 1,
+    EnemySwarm = 2
+  }
+
   public class Swarm : MonoBehaviour
   {
     [Header("Dependencies")]
     public SwarmSimManager swarmSimManager;
-    public FoodSource foodSource;
+    public FoodManager foodManager;
+    public SwarmBase swarmBase;
 
     [Header("Fixed Simulation Settings")]
     [Range(1, 2048)]
@@ -49,6 +64,16 @@ namespace AnSim.Runtime
     [Header("Swarm AI Settings")]
     public float asyncGpuRequestInterval = 2.0f; //Per component
     public uint maxGpuRequestQueueLength = 2; //Per component
+    public SwarmType swarmType = SwarmType.FishSwarm;
+    [Tooltip("With a higher value, the swarm is more likely to find the nearest food location")]
+    [Range(0, 1)]
+    public float foodLocationLuck = 0.5f;
+    private SwarmTarget _swarmTarget;
+    private FoodLocation _foodLocation;
+    private Vector3 _target;
+    private Vector3 _cachedTarget;
+    private Vector4 _explosionPositionRadius;
+    private int stuckCounter = 0;
 
     [Header("Swarm Collision Settings")]
     [Range(0f, 200f)]
@@ -68,10 +93,9 @@ namespace AnSim.Runtime
     // General
     private int _swarmSize;
     public bool IsActive { get; private set; } = true;
+    public int NumberOfSwarmsToRevive { get => _numberOfSwarmsToRevive; set => _numberOfSwarmsToRevive = value; }
 
-    // Target Update
-    private Vector3 _cachedTarget;
-    private bool _resetRequired;
+    public Vector3 LatestSwarmPosition { get => _bestSwarmPosition; }
 
     // Compute Buffers
     private PingPongIndex _pingPongIndex;
@@ -111,9 +135,12 @@ namespace AnSim.Runtime
     private int _masterSwarmUniformsSize;
 
     // Swarm Logic Stuff
+    private bool _resetRequired;
     private Queue<AsyncGPUReadbackRequest> _swarmDataRequests = new Queue<AsyncGPUReadbackRequest>();
     private float _asyncGpuRequestTimer = 0;
     private int _numberOfSwarmsToRevive = 0;
+    private Vector3 _bestSwarmPosition = Vector3.zero;
+    private int _carriedFood = 0;
 
     // Rendering
     private uint[] _renderingArgs = { 0, 0, 0, 0, 0 };
@@ -122,7 +149,8 @@ namespace AnSim.Runtime
 
     private void Awake()
     {
-      _cachedTarget = foodSource.transform.position;
+      _target = transform.position;
+      _cachedTarget = transform.position;
       _swarmSize = swarmSimManager.GetSwarmSize();
       _pingPongIndex = new PingPongIndex();
 
@@ -215,19 +243,34 @@ namespace AnSim.Runtime
     public void SetupSimulation(ComputeShader simulationShader,
     in CsKernelData csKernelData)
     {
-      /*
-       *
-       */
+      switch (swarmType)
+      {
+        case SwarmType.FishSwarm:
+          _swarmTarget = SwarmTarget.Food;
+          _foodLocation = foodManager.RequestFoodLocation(transform.position, foodLocationLuck);
+          _target = _foodLocation.transform.position;
+          _cachedTarget = _foodLocation.transform.position;
+          break;
+        case SwarmType.KamikazeAttackSwarm:
+          _swarmTarget = SwarmTarget.SwarmBase;
+          _target = transform.position;
+          _cachedTarget = transform.position;
+          break;
+        default:
+          throw new ArgumentOutOfRangeException();
+      }
+
       //Set Uniforms for Setup
       var swarmSetupUniforms = new SwarmResetUniforms()
       {
         resetPosition = transform.position,
-        target = foodSource.transform.position,
+        target = _target,
         positionVariance = setupPositionVariance,
         velocityVariance = setupVelocityVariance,
         enablePositionReset = 1,
         enableVelocityReset = 1,
-        reviveParticles = 1
+        reviveParticles = 1,
+        reviveHealthAmount = (swarmType == SwarmType.FishSwarm) ? 1.0f : 0.0f //only fishswarm starts with living particles
       };
       //Set Mask Buffer covering all swarms
       var swarmIndexMaskData = new uint[GetMaxSwarmCount()];
@@ -244,19 +287,20 @@ namespace AnSim.Runtime
 
       #region Target Update with Swarm Reset if target changed
       //Check if Swarm needs to be reset in some way
-      if (!foodSource.transform.position.Equals(_cachedTarget))
+      if (!_target.Equals(_cachedTarget))
       {
         //Set Uniforms for Setup
         var swarmSetupUniforms = new SwarmResetUniforms()
         {
           resetPosition = Vector3.zero,
-          target = foodSource.transform.position,
+          target = _target,
           positionVariance = 0,
           velocityVariance = 0,
           enablePositionReset = 0,
           enableVelocityReset = 0,
           reviveParticles = 0,
-          resetOnlyIfRevived = 0
+          resetOnlyIfRevived = 0,
+          reviveHealthAmount = 0f
         };
         //Set Mask Buffer covering all swarms
         var swarmIndexMaskData = new uint[GetMaxSwarmCount()];
@@ -266,12 +310,7 @@ namespace AnSim.Runtime
         }
         ResetSwarmWithMask(simulationShader, maskedResetKernelData, GetMaxSwarmCount(), swarmIndexMaskData, swarmSetupUniforms);
 
-        // Reset InertiaWeight
-        // TODO: Implement better control
-        //_slaveSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
-        //_masterSwarmUniforms[0].inertiaWeight = inertiaWeightMax;
-
-        _cachedTarget = foodSource.transform.position;
+        _cachedTarget = _target;
       }
       #endregion
 
@@ -283,12 +322,15 @@ namespace AnSim.Runtime
       //Updated after simulation
       //_slaveSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
       _slaveSwarmUniforms[0].n = replicatesPerParticle;
-      _slaveSwarmUniforms[0].target = foodSource.transform.position;
+      _slaveSwarmUniforms[0].target = _target;
       _slaveSwarmUniforms[0].worldDodgeBias = worldDodgeBias;
       _slaveSwarmUniforms[0].sigma = mutationStrategyParameter;
       _slaveSwarmUniforms[0].sigma_g = globalBestDisturbanceConstant;
       //Update Uniform Buffer
       _slaveSwarmUniformBuffer.SetData(_slaveSwarmUniforms);
+
+      //Input explosion data
+      simulationShader.SetVector("explosionPosRadius", _explosionPositionRadius);
 
       //Set all Buffers
       Shader.SetGlobalConstantBuffer(_slaveSwarmUniformBufferNameId, _slaveSwarmUniformBuffer, 0, _slaveSwarmUniformsSize);
@@ -301,9 +343,6 @@ namespace AnSim.Runtime
       simulationShader.DispatchIndirect(slaveSimKernelData.index, _indirectDispatchArgBuffer);
       #endregion
 
-      //DEBUG
-      //_numberOfSwarmsToRevive = 1;
-
       #region Run MasterSwarm Simulation
       //Update Uniform Data
       _masterSwarmUniforms[0].alpha = boundaryDisturbanceConstant;
@@ -313,7 +352,7 @@ namespace AnSim.Runtime
       //Updated after simulation
       //_masterSwarmUniforms[0].inertiaWeight *= inertiaWeightModifier;
       _masterSwarmUniforms[0].n = replicatesPerParticle;
-      _masterSwarmUniforms[0].target = foodSource.transform.position;
+      _masterSwarmUniforms[0].target = _target;
       _masterSwarmUniforms[0].worldDodgeBias = worldDodgeBias;
 
       _masterSwarmUniforms[0].swarmBufferMasterIndex = (uint)maxSlaveSwarmCount;
@@ -351,17 +390,22 @@ namespace AnSim.Runtime
         //Set Uniforms for Setup
         var swarmSetupUniforms = new SwarmResetUniforms()
         {
-          resetPosition = Vector3.zero,
-          target = foodSource.transform.position,
+          resetPosition = swarmBase.transform.position,
+          target = _target,
           positionVariance = 0,
           velocityVariance = 1,
           enablePositionReset = 1,
           enableVelocityReset = 1,
           reviveParticles = 1,
-          resetOnlyIfRevived = 1
+          resetOnlyIfRevived = 1,
+          reviveHealthAmount = 1.0f
         };
         ResetActiveSwarm(simulationShader, maskedResetKernelData, swarmSetupUniforms);
 
+        //Also heal master swarm
+        var swarmIndexMaskData = new uint[1];
+        swarmIndexMaskData[0] = (uint)maxSlaveSwarmCount;
+        ResetSwarmWithMask(simulationShader, maskedResetKernelData, 1, swarmIndexMaskData, swarmSetupUniforms);
       }
 
       #endregion
@@ -372,6 +416,8 @@ namespace AnSim.Runtime
 
       //Reset AI and other values
       _numberOfSwarmsToRevive = 0;
+
+      _explosionPositionRadius = Vector4.zero;
     }
 
     public void Render(in Material material, in Bounds bounds)
@@ -402,10 +448,10 @@ namespace AnSim.Runtime
       in CsKernelData csKernelData, int swarmResetCount, uint[] swarmIndexMaskData, SwarmResetUniforms swarmResetUniforms)
     {
       //Add overload with gpu index buffer instead of raw data
-      if (swarmIndexMaskData.Length != GetMaxSwarmCount())
+      /*if (swarmIndexMaskData.Length != GetMaxSwarmCount())
       {
         Debug.Log("Swarm Reset called with Mask of incorrect length.");
-      }
+      }*/
 
       //Update and Set Uniform Buffer
       SwarmResetUniforms[] uniformsAsArray = { swarmResetUniforms };
@@ -462,22 +508,87 @@ namespace AnSim.Runtime
            * ---------------------------------------------------------------
            */
           uint swarmsAlive = 0;
+          bool reachedTarget = false;
           for (int i = 0; i < swarmDataArray.Length; i++)
           {
             var swarm = swarmDataArray[i];
-            if ((swarm.particlesAlive == 0)) continue;
+            if (swarm.particlesAlive == 0) continue;
 
             swarmsAlive++;
 
-            if (swarm.fitness < 5.5f)
+            if (swarm.fitness < 5.0f)
             {
-              var foodAmount = foodSource.EatFood();
-              _numberOfSwarmsToRevive += foodAmount;
-
-              if (foodAmount > 0) Debug.Log("Swarm ate " + foodAmount + " food.");
-
+              reachedTarget = true;
             }
+          }
 
+          var newBest = swarmDataArray[GetMaxSlaveSwarmCount()].globalBest;
+          if ((newBest - _bestSwarmPosition).magnitude < 0.1f)
+          {
+            stuckCounter++;
+          }
+          else
+          {
+            stuckCounter = 0;
+          }
+          _bestSwarmPosition = newBest;
+
+          switch (swarmType)
+          {
+            case SwarmType.FishSwarm:
+              if (reachedTarget)
+              {
+                //Action based on SwarmTarget
+                if (_swarmTarget == SwarmTarget.SwarmBase)
+                {
+                  // Heal full
+                  _numberOfSwarmsToRevive += GetMaxSlaveSwarmCount();
+                  swarmBase.StoreFood(_carriedFood);
+                  _carriedFood = 0;
+                }
+                else //Food Target
+                {
+                  //Eat 25% and carry 75%
+                  var foodAmount = _foodLocation.EatFood();
+                  _numberOfSwarmsToRevive += (int)(foodAmount * 0.25f);
+                  _carriedFood += (int)(foodAmount * 0.75f);
+                }
+              }
+
+              if (reachedTarget || stuckCounter > 5)
+              {
+                _foodLocation = foodManager.RequestFoodLocation(_bestSwarmPosition, foodLocationLuck);
+
+                // Determine new SwarmTarget
+                if (_foodLocation == null || _carriedFood >= swarmsAlive /* *_swarmSize */)
+                {
+                  //Return to base if there is no food available or cant carry any more food
+                  _swarmTarget = SwarmTarget.SwarmBase;
+                  _target = swarmBase.transform.position;
+                  _foodLocation = null;
+                }
+                else //Food Target
+                {
+                  _swarmTarget = SwarmTarget.Food;
+                  _target = _foodLocation.transform.position;
+                }
+              }
+
+              break;
+            case SwarmType.KamikazeAttackSwarm:
+
+              if (swarmsAlive > 0) Debug.Log("Alive Swarms: " + swarmsAlive);
+              if (reachedTarget)
+              {
+                Debug.Log("Trigger Explosion");
+                //Trigger explosion, affecting itself and enemy swarm. No friendly fire
+                swarmBase.RemoteTriggerExplosion(_bestSwarmPosition, swarmsAlive * 5f);
+              }
+
+              _target = swarmBase.enemySwarm.LatestSwarmPosition;
+              break;
+            default:
+              throw new ArgumentOutOfRangeException();
           }
 
           //Debug.Log(swarmsAlive + " swarms alive.");
@@ -530,10 +641,15 @@ namespace AnSim.Runtime
     private int GetMaxSlaveSwarmParticleCount() => maxSlaveSwarmCount * _swarmSize;
     private int GetCurrentSwarmParticleCount() => GetCurrentSwarmCount() * _swarmSize;
 
+    public void ActivateExplosion(Vector3 position, float radius)
+    {
+      _explosionPositionRadius = new Vector4(position.x, position.y, position.z, radius);
+    }
+
     private void OnDrawGizmos()
     {
       Gizmos.color = particleTint;
-      Gizmos.DrawWireSphere(foodSource.transform.position, 1f);
+      Gizmos.DrawWireSphere(_target, 1f);
     }
 
     private void OnValidate()

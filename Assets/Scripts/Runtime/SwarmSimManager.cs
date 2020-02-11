@@ -13,6 +13,7 @@ namespace AnSim.Runtime
     [Header("Simulation Settings")]
     [Range(0.01f, 2.00f)]
     public float timeScale = 0.1f;
+    private float _timer = 0.0f;
 
     [Header("Resource Management")]
     public SimulationResources simulationResources;
@@ -69,7 +70,7 @@ namespace AnSim.Runtime
       simulationResources.shaders.swarmSimulationComputeShader.SetTexture(simulationResources.shaders.swarmSimulationMasterUpdateKernelData.index, _distanceGradientFieldTextureNameId, _distanceFieldVolume.DistanceGradientField3DTexture);
 
       _distanceFieldVolume.ExecutePipeline();
-
+      
       #region Init all Swarms
       //Update global Swarm Simulation Uniforms
       _swarmSimulationUniforms[0].timeScale = timeScale;
@@ -104,7 +105,14 @@ namespace AnSim.Runtime
 
       //Update global Swarm Simulation Uniforms
       _swarmSimulationUniforms[0].timeScale = timeScale;
-      _swarmSimulationUniforms[0].timeSinceStart = Time.time;
+      //Manage slow mode. Only update timeSinceStart after 1 time unit has passed to get same results in slow mode.
+      //timeSinceStart is used for random number generation
+      _timer += 1;
+      if (_timer * timeScale >= 1.0f)
+      {
+        _timer = 0;
+        _swarmSimulationUniforms[0].timeSinceStart = Time.time;
+      }
       _swarmSimulationUniforms[0].worldmax = transform.position + transform.localScale;
       _swarmSimulationUniforms[0].worldmin = transform.position;
       _swarmSimulationUniformBuffer.SetData(_swarmSimulationUniforms);
@@ -172,20 +180,6 @@ namespace AnSim.Runtime
       }
 
       return 0;
-    }
-
-    /*
-     * Returns a valid position inside Simulation Boounds
-     * TODO: Prevent position be to be inside environment.
-     */
-    public Vector3 GetValidFoodPosition()
-    {
-      var foodPos = new Vector3(
-        Random.Range(_simulationBounds.min.x, _simulationBounds.max.x),
-        Random.Range(_simulationBounds.min.y, _simulationBounds.max.y),
-        Random.Range(_simulationBounds.min.z, _simulationBounds.max.z)
-      );
-      return foodPos;
     }
 
     private void OnDrawGizmos()

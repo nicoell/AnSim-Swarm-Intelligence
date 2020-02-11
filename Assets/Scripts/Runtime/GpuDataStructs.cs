@@ -104,7 +104,7 @@ namespace AnSim.Runtime
     //------------------------------------------- 16byte Boundary
   }
 
-  [StructLayout(LayoutKind.Explicit, Size = 48)]
+  [StructLayout(LayoutKind.Explicit, Size = 64)]
   public struct SwarmResetUniforms
   {
     [FieldOffset(0)]
@@ -126,6 +126,8 @@ namespace AnSim.Runtime
     [FieldOffset(44)]
     public uint resetOnlyIfRevived; //Only reset pos and velocity if particle actually gets revived (health of particle was 0)
     //------------------------------------------- 16byte Boundary
+    [FieldOffset(48)]
+    public float reviveHealthAmount; //Only matters if reviveParticles is true
   }
 
   public struct SwarmParticleData
@@ -135,8 +137,9 @@ namespace AnSim.Runtime
     public float health;
     public Vector3 localBest;
     public float fitness;
+    public Vector3[] rotationMatrix; //because there is no matrix3x3 and we just need this to represent gpu size
 
-    public static int GetSize() => (3 + 3 + 1 + 3 + 1) * sizeof(float);
+    public static int GetSize() => (3 + 3 + 1 + 3 + 1 + 3*3) * sizeof(float);
   }
 
   public struct SwarmData

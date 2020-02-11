@@ -39,7 +39,9 @@
         SwarmParticleData particle = SwarmParticleBuffer[particleIndex];
 
         VertOut o;
-        o.pos = float4(vertIn.vertex.xyz + particle.position.xyz, 1);
+        o.pos = float4(float3(1, 1, 5) * vertIn.vertex.xyz, 1);
+        o.pos = float4(mul(particle.rotationMatrix, o.pos.xyz), 1);
+        o.pos = float4(o.pos.xyz + particle.position.xyz, 1);
         //o.pos.xyz = vertIn.vertex.xyz + float3(particleIndex, particleIndex, particleIndex);
         o.pos = mul(UNITY_MATRIX_VP, o.pos);
         o.color = /*float(swarmIndex)/ 32.0 * */particleTint * particle.health;
