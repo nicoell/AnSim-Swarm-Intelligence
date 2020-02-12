@@ -181,7 +181,7 @@ namespace AnSim.Runtime
       _swarmCounterBuffer.SetCounterValue(0u);
 
       _indirectDispatchWriteBufferNameId = Shader.PropertyToID("RWIndirectDispatchBuffer");
-      _indirectDispatchArgs = new[] { (uint)GetCurrentSwarmCount(), 1u, 1u };
+      _indirectDispatchArgs = new[] { (uint)GetCurrentSlaveSwarmCount(), 1u, 1u };
       _indirectDispatchArgBuffer = new ComputeBuffer(1, _indirectDispatchArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
       _indirectDispatchArgBuffer.SetData(_indirectDispatchArgs);
 
@@ -270,6 +270,7 @@ namespace AnSim.Runtime
         enablePositionReset = 1,
         enableVelocityReset = 1,
         reviveParticles = 1,
+        resetOnlyIfRevived = 0,
         reviveHealthAmount = (swarmType == SwarmType.FishSwarm) ? 1.0f : 0.0f //only fishswarm starts with living particles
       };
       //Set Mask Buffer covering all swarms
@@ -392,7 +393,7 @@ namespace AnSim.Runtime
         {
           resetPosition = swarmBase.transform.position,
           target = _target,
-          positionVariance = 0,
+          positionVariance = 1,
           velocityVariance = 1,
           enablePositionReset = 1,
           enableVelocityReset = 1,
@@ -456,17 +457,18 @@ namespace AnSim.Runtime
       //Update and Set Uniform Buffer
       SwarmResetUniforms[] uniformsAsArray = { swarmResetUniforms };
       _swarmResetUniformBuffer.SetData(uniformsAsArray);
-      Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
+
 
       //Update and Set IndexMaskBuffer
-      _swarmIndexMaskBuffer.SetData(swarmIndexMaskData);
+      _swarmIndexMaskBuffer.SetData(swarmIndexMaskData, 0, 0, swarmResetCount);
       simulationShader.SetBuffer(csKernelData.index, _swarmIndexBufferIds[0], _swarmIndexMaskBuffer);
 
       //Set Swarm Buffers
       simulationShader.SetBuffer(csKernelData.index, _swarmBufferNameId, _swarmBuffer);
       simulationShader.SetBuffer(csKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 
-
+      
+      Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
       simulationShader.Dispatch(csKernelData.index, swarmResetCount, 1, 1);
     }
 
@@ -476,7 +478,6 @@ namespace AnSim.Runtime
       //Update and Set Uniform Buffer
       SwarmResetUniforms[] uniformsAsArray = { swarmResetUniforms };
       _swarmResetUniformBuffer.SetData(uniformsAsArray);
-      Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
 
       //Update and Set IndexMaskBuffer
       simulationShader.SetBuffer(csKernelData.index, _swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Pong]); //Important: Uses Pong Buffer, which was updated during this frame!
@@ -485,7 +486,8 @@ namespace AnSim.Runtime
       simulationShader.SetBuffer(csKernelData.index, _swarmBufferNameId, _swarmBuffer);
       simulationShader.SetBuffer(csKernelData.index, _swarmParticleBufferNameId, _swarmParticleBuffer);
 
-
+      
+      Shader.SetGlobalConstantBuffer(_swarmResetUniformBufferNameId, _swarmResetUniformBuffer, 0, _swarmResetUniformsSize);
       simulationShader.DispatchIndirect(csKernelData.index, _indirectDispatchArgBuffer);
     }
 
@@ -550,8 +552,8 @@ namespace AnSim.Runtime
                 {
                   //Eat 25% and carry 75%
                   var foodAmount = _foodLocation.EatFood();
-                  _numberOfSwarmsToRevive += (int)(foodAmount * 0.25f);
-                  _carriedFood += (int)(foodAmount * 0.75f);
+                  _numberOfSwarmsToRevive += Mathf.CeilToInt(foodAmount * 0.25f);
+                  _carriedFood += Mathf.CeilToInt(foodAmount * 0.75f);
                 }
               }
 
@@ -582,7 +584,7 @@ namespace AnSim.Runtime
               {
                 Debug.Log("Trigger Explosion");
                 //Trigger explosion, affecting itself and enemy swarm. No friendly fire
-                swarmBase.RemoteTriggerExplosion(_bestSwarmPosition, swarmsAlive * 5f);
+                swarmBase.RemoteTriggerExplosion(_bestSwarmPosition, swarmsAlive * 15f);
               }
 
               _target = swarmBase.enemySwarm.LatestSwarmPosition;

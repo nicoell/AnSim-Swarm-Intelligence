@@ -47,7 +47,7 @@
         o.color = /*float(swarmIndex)/ 32.0 * */particleTint * particle.health;
 
         //Debug Color Master Swarm
-        if (swarmIndex == 32) {
+        if (swarmIndex == 16) {
           o.color = float4(1, 0, 0, 1);
         }
         return o;
