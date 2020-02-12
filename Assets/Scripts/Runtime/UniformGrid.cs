@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 namespace AnSim.Runtime
 {
@@ -106,7 +107,7 @@ namespace AnSim.Runtime
       Array.Sort(particleHashes, (x, y) => x.cellId.CompareTo(y.cellId));
 
       // Put sorted array back to gpu buffer
-      _particleHashBuffer.SetData(particleHashes);      
+      _particleHashBuffer.SetData(particleHashes); 
     }
 
     private void resetUIntBuffer(ComputeBuffer bufferToReset)

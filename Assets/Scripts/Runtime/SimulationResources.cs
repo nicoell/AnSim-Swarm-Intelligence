@@ -46,9 +46,6 @@ namespace AnSim.Runtime
         uniformGridConstructionComputeShader =
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "UniformGridConstruction.compute"),
-        radixSortComputeShader =
-          AssetDatabase.LoadAssetAtPath<ComputeShader>(
-            anSimShaderPath + "RadixSort.compute"),
         clearBufferParticleHashComputeShader =
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "ClearBufferParticleHash.compute"),
@@ -109,8 +106,6 @@ namespace AnSim.Runtime
 
       public ComputeShader uniformGridConstructionComputeShader;
       public CsKernelData uniformGridFindCellStartKernelData;
-
-      public ComputeShader radixSortComputeShader;
     }
 
     [Serializable]

@@ -87,9 +87,8 @@ namespace AnSim.Runtime
       #endregion
 
       // Init Uniform Grid
-      //TODO: Setup Uniform to give the offsetsSwarms to the SwarmSimulation.compute
       _uniformGrid.Init(totalNumberParticles, new Vector3Int(64, 64, 64));
-      
+
       //Set global variables in swarmSimulation.compute needed by uniform grid 1st Pass and final usage
       simulationResources.shaders.swarmSimulationComputeShader.SetVector("GridSize", _uniformGrid.GridSize);// uint3
       simulationResources.shaders.swarmSimulationComputeShader.SetVector("CellSize", _uniformGrid.CellSize);// float3
@@ -125,7 +124,7 @@ namespace AnSim.Runtime
 
       _swarms.Shuffle(); //Shuffle swarms to reduce disadvantaging any swarm in reaching a target
 
-      for(int i = 0; i < _swarms.Count; i++)
+      for (int i = 0; i < _swarms.Count; i++)
       {
         simulationResources.shaders.swarmSimulationComputeShader.SetInt("SwarmOffset", _offsetsSwarms[i]);
         _swarms[i].RunSimulation(simulationResources.shaders.swarmSimulationComputeShader, simulationResources.shaders.swarmSimulationMaskedResetKernelData, simulationResources.shaders.swarmSimulationSlaveUpdateKernelData, simulationResources.shaders.swarmSimulationMasterUpdateKernelData);

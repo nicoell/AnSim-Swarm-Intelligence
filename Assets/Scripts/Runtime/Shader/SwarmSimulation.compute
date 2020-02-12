@@ -37,7 +37,7 @@ RWStructuredBuffer<ParticleHashData> TempParticleHashBuffer;
 StructuredBuffer<ParticleHashData> ParticleHashBuffer;
 StructuredBuffer<uint> CellStartBuffer;
 
-uint3 GridSize;
+float3 GridSize;
 float3 CellSize;
 float3 WorldOrigin;
 int SwarmOffset;
@@ -561,6 +561,6 @@ inline uint calcGridAddress(int3 gridPos)
   gridPos.x = max(0, min(gridPos.x, GridSize.x - 1));
   gridPos.y = max(0, min(gridPos.y, GridSize.y - 1));
   gridPos.z = max(0, min(gridPos.z, GridSize.z - 1));
-  return ((gridPos.z * GridSize.y) * GridSize.x) + (gridPos.y * GridSize.x) + gridPos.x;
+  return (uint)(((gridPos.z * GridSize.y) * GridSize.x) + (gridPos.y * GridSize.x) + gridPos.x);
 }
 
