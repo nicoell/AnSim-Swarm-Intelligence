@@ -13,6 +13,7 @@ namespace AnSim.Runtime
   {
     public ShaderResources shaders;
     public MaterialResources materials;
+    public UtilityResources utilities;
 
 #if UNITY_EDITOR
     public void Init()
@@ -46,6 +47,9 @@ namespace AnSim.Runtime
         clearBufferUintComputeShader =  
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "ClearBufferUint.compute"),
+        bitonicMergeSortComputeShader =  
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "BitonicMergeSort.compute"),
       };
 
       shaders.swarmSimulationMaskedResetKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MaskedReset");
@@ -63,11 +67,19 @@ namespace AnSim.Runtime
 
       shaders.clearBufferUintKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "Clear");
 
+      shaders.bitonicMergeSortInitKeysKernelData = new CsKernelData(shaders.bitonicMergeSortComputeShader, "InitKeys");
+      shaders.bitonicMergeSortBitonicSortKernelData = new CsKernelData(shaders.bitonicMergeSortComputeShader, "BitonicSort");
+
       materials = new MaterialResources()
       {
         swarmRenderMaterial = new Material(shaders.swarmRenderingShader),
         fragmentCountingMaterial = new Material(shaders.fragmentCountingShader),
         dynamicDepthBufferConstructionMaterial = new Material(shaders.dynamicDepthBufferConstructionShader)
+      };
+
+      utilities = new UtilityResources()
+      {
+        bitomicMergeSort = new BitomicMergeSort(shaders.bitonicMergeSortComputeShader, shaders.bitonicMergeSortInitKeysKernelData, shaders.bitonicMergeSortBitonicSortKernelData)
       };
 
     }
@@ -88,6 +100,7 @@ namespace AnSim.Runtime
       public ComputeShader distanceToGradientFieldComputeShader;
       public ComputeShader prefixSumComputeShader;
       public ComputeShader clearBufferUintComputeShader;
+      public ComputeShader bitonicMergeSortComputeShader;
 
       public CsKernelData prefixSumScanInBucketInclusiveKernelData;
       public CsKernelData prefixSumScanInBucketExclusiveKernelData;
@@ -96,6 +109,8 @@ namespace AnSim.Runtime
       public CsKernelData distanceFieldConstructionKernelData;
       public CsKernelData distanceToGradientKernelData;
       public CsKernelData clearBufferUintKernelData;
+      public CsKernelData bitonicMergeSortInitKeysKernelData;
+      public CsKernelData bitonicMergeSortBitonicSortKernelData;
     }
 
     [Serializable]
@@ -104,6 +119,12 @@ namespace AnSim.Runtime
       public Material swarmRenderMaterial;
       public Material fragmentCountingMaterial;
       public Material dynamicDepthBufferConstructionMaterial;
+    }
+
+    [Serializable]
+    public sealed class UtilityResources
+    {
+      public BitomicMergeSort bitomicMergeSort;
     }
   }
 }
