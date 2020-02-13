@@ -24,4 +24,10 @@ struct DistanceFieldObjectMatrices
   float4x4 matrices[3];
 };
 
+struct ParticleHashData
+{
+  float3 particlePos; // position of this particle in the world
+  uint cellId; // Id of the cell in the uniform grid, in which this particle is in
+};
+
 #endif  // STRUCTS_INCLUDED

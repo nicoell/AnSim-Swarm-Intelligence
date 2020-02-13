@@ -50,6 +50,12 @@ namespace AnSim.Runtime
         bitonicMergeSortComputeShader =  
           AssetDatabase.LoadAssetAtPath<ComputeShader>(
             anSimShaderPath + "BitonicMergeSort.compute"),
+        clearBufferParticleHashComputeShader =
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "ClearBufferParticleHash.compute"),
+        uniformGridConstructionComputeShader =
+          AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            anSimShaderPath + "UniformGridConstruction.compute"),
       };
 
       shaders.swarmSimulationMaskedResetKernelData = new CsKernelData(shaders.swarmSimulationComputeShader, "MaskedReset");
@@ -66,6 +72,10 @@ namespace AnSim.Runtime
       shaders.prefixSumScanAddBucketResultKernelData = new CsKernelData(shaders.prefixSumComputeShader, "ScanAddBucketResult");
 
       shaders.clearBufferUintKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "Clear");
+      shaders.clearBufferUintUniformGridKernelData = new CsKernelData(shaders.clearBufferUintComputeShader, "ClearForGrid");
+      shaders.clearBufferParticleHashKernelData = new CsKernelData(shaders.clearBufferParticleHashComputeShader, "Clear");
+
+      shaders.uniformGridFindCellStartKernelData = new CsKernelData(shaders.uniformGridConstructionComputeShader, "FindCellStart");
 
       shaders.bitonicMergeSortInitKeysKernelData = new CsKernelData(shaders.bitonicMergeSortComputeShader, "InitKeys");
       shaders.bitonicMergeSortBitonicSortKernelData = new CsKernelData(shaders.bitonicMergeSortComputeShader, "BitonicSort");
@@ -101,6 +111,7 @@ namespace AnSim.Runtime
       public ComputeShader prefixSumComputeShader;
       public ComputeShader clearBufferUintComputeShader;
       public ComputeShader bitonicMergeSortComputeShader;
+      public ComputeShader clearBufferParticleHashComputeShader;
 
       public CsKernelData prefixSumScanInBucketInclusiveKernelData;
       public CsKernelData prefixSumScanInBucketExclusiveKernelData;
@@ -111,6 +122,11 @@ namespace AnSim.Runtime
       public CsKernelData clearBufferUintKernelData;
       public CsKernelData bitonicMergeSortInitKeysKernelData;
       public CsKernelData bitonicMergeSortBitonicSortKernelData;
+      public CsKernelData clearBufferUintUniformGridKernelData;
+      public CsKernelData clearBufferParticleHashKernelData;
+
+      public ComputeShader uniformGridConstructionComputeShader;
+      public CsKernelData uniformGridFindCellStartKernelData;
     }
 
     [Serializable]
