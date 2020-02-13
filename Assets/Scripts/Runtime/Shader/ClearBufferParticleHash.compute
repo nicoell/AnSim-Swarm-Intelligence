@@ -1,0 +1,15 @@
+﻿#pragma kernel Clear
+
+#include "Definitions/Structs.hlsl"
+
+RWStructuredBuffer<ParticleHashData> BufferToClear;
+int NumGridCells;
+
+[numthreads(256,1,1)]
+void Clear (uint3 id : SV_DispatchThreadID)
+{
+  ParticleHashData def;
+  def.particlePos = float3(0, 0, 0);
+  def.cellId = NumGridCells + 5;
+  BufferToClear[id.x] = def;
+}

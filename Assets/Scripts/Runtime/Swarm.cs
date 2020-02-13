@@ -639,7 +639,7 @@ namespace AnSim.Runtime
     private int GetCurrentSwarmCount() => GetCurrentSlaveSwarmCount() + 1;
     private int GetCurrentSlaveSwarmCount() => Mathf.Min(maxSlaveSwarmCount, activeSlaveSwarmCount);
 
-    private int GetMaxSwarmParticleCount() => GetMaxSlaveSwarmParticleCount() + _swarmSize;
+    public int GetMaxSwarmParticleCount() => GetMaxSlaveSwarmParticleCount() + _swarmSize;
     private int GetMaxSlaveSwarmParticleCount() => maxSlaveSwarmCount * _swarmSize;
     private int GetCurrentSwarmParticleCount() => GetCurrentSwarmCount() * _swarmSize;
 
