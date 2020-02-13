@@ -14,6 +14,10 @@ namespace AnSim.Runtime
     [Range(0.01f, 2.00f)]
     public float timeScale = 0.1f;
     private float _timer = 0.0f;
+    [Range(0.1f, 20.0f)]
+    public float particleSightRadius = 10.0f;
+    [Range(0.01f, 1.0f)]
+    public float separationWeight = 0.6f;
 
     [Header("Resource Management")]
     public SimulationResources simulationResources;
@@ -105,6 +109,8 @@ namespace AnSim.Runtime
       _uniformGrid.Init(totalNumberParticles, new Vector3Int(64, 64, 64));
 
       //Set global variables in swarmSimulation.compute needed by uniform grid 1st Pass and final usage
+      simulationResources.shaders.swarmSimulationComputeShader.SetFloat("SeparationWeight", separationWeight);
+      simulationResources.shaders.swarmSimulationComputeShader.SetFloat("ParticleSightRadius", particleSightRadius);
       simulationResources.shaders.swarmSimulationComputeShader.SetVector("GridSize", _uniformGrid.GridSize);// uint3
       simulationResources.shaders.swarmSimulationComputeShader.SetVector("CellSize", _uniformGrid.CellSize);// float3
       simulationResources.shaders.swarmSimulationComputeShader.SetVector("WorldOrigin", _uniformGrid.WorldOrigin);// float3
