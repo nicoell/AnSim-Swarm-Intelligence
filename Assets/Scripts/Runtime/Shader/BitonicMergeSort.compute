@@ -1,0 +1,75 @@
+﻿/*
+MIT License
+
+Copyright (c) 2019 Nakata Nobuyuki (仲田将之)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+From nobnak - GPUMergeSortForUnity:
+  https://github.com/nobnak/GPUMergeSortForUnity
+
+*/
+
+#define GROUP_SIZE 256
+#define MAX_DIM_GROUPS 1024
+#define MAX_DIM_THREADS (GROUP_SIZE * MAX_DIM_GROUPS)
+#pragma kernel BitonicSort
+#pragma kernel InitKeys
+
+struct ParticleHashData
+{
+  float3 particlePos;
+  uint cellId;
+};
+
+int block;
+int dim;
+uint count;
+RWStructuredBuffer<uint> Keys;
+StructuredBuffer<ParticleHashData> Values;
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void BitonicSort(uint3 id : SV_DispatchThreadID)
+{
+  uint i = id.x + id.y * MAX_DIM_THREADS;
+  uint j = i ^ block;
+	
+  if (j < i || i >= count) 
+    return;
+	
+  uint key_i = Keys[i];
+  uint key_j = Keys[j];
+  int value_i = int(Values[key_i].cellId);
+  int value_j = int(Values[key_j].cellId);
+	
+  int diff = (value_i - value_j) * ((i & dim) == 0 ? 1 : -1);
+  if (diff > 0)
+  {
+    Keys[i] = key_j;
+    Keys[j] = key_i;
+  }
+}
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void InitKeys(uint3 id : SV_DispatchThreadID)
+{
+  uint i = id.x + id.y * MAX_DIM_THREADS;
+  if (i < count)
+    Keys[i] = i;
+}

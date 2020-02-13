@@ -1,0 +1,19 @@
+﻿#pragma kernel Clear
+#pragma kernel ClearForGrid
+
+RWStructuredBuffer<uint> BufferToClear;
+int NumGridCells;
+
+#include "Definitions/DistanceFieldVolumeSize.hlsl"
+
+[numthreads(THREADS_PER_GROUP, 1, 1)]
+void Clear (uint3 id : SV_DispatchThreadID)
+{
+  BufferToClear[id.x] = 0;
+}
+
+[numthreads(THREADS_PER_GROUP, 1, 1)]
+void ClearForGrid(uint3 id : SV_DispatchThreadID)
+{
+  BufferToClear[id.x] = NumGridCells + 5;
+}

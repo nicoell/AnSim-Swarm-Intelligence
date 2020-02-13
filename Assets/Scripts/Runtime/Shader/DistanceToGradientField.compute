@@ -1,0 +1,49 @@
+﻿#pragma kernel CSMain
+
+#include "Definitions/DistanceFieldVolumeSize.hlsl"
+#define GRADIENT_THREADS_PER_GROUP 4
+
+Texture3D<float> DistanceFieldTexture;
+RWTexture3D<float4> DistanceGradientFieldTexture;
+
+int volumeResolution;
+/*
+groupshared float gsDepth[GRADIENT_THREADS_PER_GROUP + 2][GRADIENT_THREADS_PER_GROUP + 2][GRADIENT_THREADS_PER_GROUP + 2];
+
+inline int3 WrapMode(int3 x)
+{
+  return clamp(x, int3(0, 0, 0), int3(volumeResolution - 1, volumeResolution - 1, volumeResolution - 1));
+
+}*/
+
+[numthreads(GRADIENT_THREADS_PER_GROUP, GRADIENT_THREADS_PER_GROUP, GRADIENT_THREADS_PER_GROUP)]
+void CSMain(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupThreadID)
+{
+  const int3 k = int3(-1, 0, 1);
+  
+  // TODO: Make usage of sharedMemory to reduce texture loads.
+  
+  float currentDepth = DistanceFieldTexture.Load(int4(id, 0));
+  float load100 = DistanceFieldTexture.Load(int4((id + k.zxx), 0));
+  float load001 = DistanceFieldTexture.Load(int4((id + k.xxz), 0));
+  float load010 = DistanceFieldTexture.Load(int4((id + k.xzx), 0));
+  float load111 = DistanceFieldTexture.Load(int4((id + k.zzz), 0));
+  
+  float3 sample100 = (load100 == -1) ? 0 : k.zxx * load100;
+  float3 sample001 = (load001 == -1) ? 0 : k.xxz * load001;
+  float3 sample010 = (load010 == -1) ? 0 : k.xzx * load010;
+  float3 sample111 = (load111 == -1) ? 0 : k.zzz * load111;
+
+  float3 gradient = (sample100 + sample001 + sample010 + sample111);
+  gradient.xy = gradient.yx;
+ 
+  //normalize if we have information
+  gradient = any(gradient != 0) ? normalize(gradient) : 0;
+  
+  if (load100 == -1 || load001 == -1 || load010 == -1 || load111 == -1)
+  {
+    gradient = 0;
+  }
+
+  DistanceGradientFieldTexture[id] = float4(gradient, currentDepth);
+}
