@@ -80,9 +80,9 @@ namespace AnSim.Runtime
     public float worldDodgeBias = 10f;
 
     [Header("Render Settings")]
-    public Mesh particleMesh;
-    public int subMeshIndex = 0;
-    public Color particleTint = Color.white;
+    public Mesh[] particleMeshes;
+    public int[] subMeshIndices;
+    public Material[] particleMaterials;
 
     public bool IsResetRequired
     {
@@ -144,7 +144,7 @@ namespace AnSim.Runtime
 
     // Rendering
     private uint[] _renderingArgs = { 0, 0, 0, 0, 0 };
-    private ComputeBuffer _renderingArgBuffer;
+    private ComputeBuffer[] _renderingArgBuffer;
     private MaterialPropertyBlock _materialProperties;
 
     private void Awake()
@@ -225,18 +225,23 @@ namespace AnSim.Runtime
       #endregion
 
       #region Init Rendering
-      _renderingArgBuffer = new ComputeBuffer(1, _renderingArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
 
-      subMeshIndex = Mathf.Clamp(subMeshIndex, 0, particleMesh.subMeshCount - 1);
-      _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndex);
-      _renderingArgs[1] = (uint)GetMaxSwarmParticleCount();
-      _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndex);
-      _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndex);
-      _renderingArgBuffer.SetData(_renderingArgs);
+      _renderingArgBuffer = new ComputeBuffer[particleMeshes.Length];
+      for (var i = 0; i < particleMeshes.Length; i++)
+      {
+        var particleMesh = particleMeshes[i];
+        _renderingArgBuffer[i] = new ComputeBuffer(1, _renderingArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+
+        subMeshIndices[i] = Mathf.Clamp(subMeshIndices[i], 0, particleMesh.subMeshCount - 1);
+        _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndices[i]);
+        _renderingArgs[1] = (uint)GetMaxSwarmParticleCount();
+        _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndices[i]);
+        _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndices[i]);
+        _renderingArgBuffer[i].SetData(_renderingArgs);
+      }
 
       _materialProperties = new MaterialPropertyBlock();
       _materialProperties.SetBuffer(_swarmParticleBufferNameId, _swarmParticleBuffer);
-      _materialProperties.SetColor("particleTint", particleTint);
       #endregion
     }
 
@@ -423,22 +428,26 @@ namespace AnSim.Runtime
 
     public void Render(in Material material, in Bounds bounds)
     {
-      // Update Arguments and Uniforms
-      subMeshIndex = Mathf.Clamp(subMeshIndex, 0, particleMesh.subMeshCount - 1);
-      _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndex);
-      _renderingArgs[1] = (uint)GetCurrentSwarmParticleCount();
-      _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndex);
-      _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndex);
-      _renderingArgBuffer.SetData(_renderingArgs);
-
       _materialProperties.SetBuffer(_swarmParticleBufferNameId, _swarmParticleBuffer);
-
       _materialProperties.SetBuffer(_swarmIndexBufferIds[0], _swarmIndexBuffers[_pingPongIndex.Ping]);
-      _materialProperties.SetColor("particleTint", particleTint);
       _materialProperties.SetInt("swarmSize", _swarmSize);
 
-      Graphics.DrawMeshInstancedIndirect(particleMesh, subMeshIndex, material, bounds, _renderingArgBuffer, 0, _materialProperties);
+      // Update Arguments and Uniforms
+      _renderingArgBuffer = new ComputeBuffer[particleMeshes.Length];
+      for (var i = 0; i < particleMeshes.Length; i++)
+      {
+        var particleMesh = particleMeshes[i];
+        _renderingArgBuffer[i] = new ComputeBuffer(1, _renderingArgs.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
 
+        subMeshIndices[i] = Mathf.Clamp(subMeshIndices[i], 0, particleMesh.subMeshCount - 1);
+        _renderingArgs[0] = particleMesh.GetIndexCount(subMeshIndices[i]);
+        _renderingArgs[1] = (uint)GetMaxSwarmParticleCount();
+        _renderingArgs[2] = particleMesh.GetIndexStart(subMeshIndices[i]);
+        _renderingArgs[3] = particleMesh.GetBaseVertex(subMeshIndices[i]);
+        _renderingArgBuffer[i].SetData(_renderingArgs);
+
+        Graphics.DrawMeshInstancedIndirect(particleMesh, subMeshIndices[i], particleMaterials[i], bounds, _renderingArgBuffer[i], 0, _materialProperties);
+      }
 
       //Swap PingPong Indices
       _pingPongIndex.Advance();
@@ -650,7 +659,7 @@ namespace AnSim.Runtime
 
     private void OnDrawGizmos()
     {
-      Gizmos.color = particleTint;
+      Gizmos.color = particleMaterials[0].GetColor("_Tint");
       Gizmos.DrawWireSphere(_target, 1f);
     }
 

@@ -212,27 +212,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 9
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 45}
---- !u!21 &133468346
-Material:
-  serializedVersion: 6
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/DynamicDepthBufferConstruction
-  m_Shader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c, type: 3}
-  m_ShaderKeywords: 
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs: []
-    m_Floats: []
-    m_Colors: []
 --- !u!1 &137614622
 GameObject:
   m_ObjectHideFlags: 0
@@ -417,99 +396,48 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 6
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 45}
---- !u!114 &263696351
-MonoBehaviour:
+--- !u!21 &235892007
+Material:
+  serializedVersion: 6
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c06aaec03025c554a9e16b5ec30b38a9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  shaders:
-    swarmSimulationComputeShader: {fileID: 7200000, guid: abee205e697b91c46b7d2bc0b860ef18,
-      type: 3}
-    swarmSimulationMaskedResetKernelData:
-      index: 0
-      name: MaskedReset
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    swarmSimulationSlaveUpdateKernelData:
-      index: 1
-      name: SlaveUpdate
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    swarmSimulationMasterUpdateKernelData:
-      index: 2
-      name: MasterUpdate
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    swarmRenderingShader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a,
-      type: 3}
-    fragmentCountingShader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad,
-      type: 3}
-    dynamicDepthBufferConstructionShader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c,
-      type: 3}
-    distanceFieldConstructionComputeShader: {fileID: 7200000, guid: 89f562db77bfa254fb83d6d1670f263e,
-      type: 3}
-    distanceToGradientFieldComputeShader: {fileID: 7200000, guid: 9ebb13dec865aac42bab2a96ec91b48b,
-      type: 3}
-    prefixSumComputeShader: {fileID: 7200000, guid: e55887909730bd74f9ddf3a52987997a,
-      type: 3}
-    clearBufferUintComputeShader: {fileID: 7200000, guid: e69288c5a5faef443b300c1dc66f682f,
-      type: 3}
-    prefixSumScanInBucketInclusiveKernelData:
-      index: 0
-      name: ScanInBucketInclusive
-      numThreadsX: 128
-      numThreadsY: 1
-      numThreadsZ: 1
-    prefixSumScanInBucketExclusiveKernelData:
-      index: 1
-      name: ScanInBucketExclusive
-      numThreadsX: 128
-      numThreadsY: 1
-      numThreadsZ: 1
-    prefixSumScanBucketResultKernelData:
-      index: 2
-      name: ScanBucketResult
-      numThreadsX: 128
-      numThreadsY: 1
-      numThreadsZ: 1
-    prefixSumScanAddBucketResultKernelData:
-      index: 3
-      name: ScanAddBucketResult
-      numThreadsX: 128
-      numThreadsY: 1
-      numThreadsZ: 1
-    distanceFieldConstructionKernelData:
-      index: 0
-      name: CSMain
-      numThreadsX: 64
-      numThreadsY: 1
-      numThreadsZ: 1
-    distanceToGradientKernelData:
-      index: 0
-      name: CSMain
-      numThreadsX: 4
-      numThreadsY: 4
-      numThreadsZ: 4
-    clearBufferUintKernelData:
-      index: 0
-      name: Clear
-      numThreadsX: 128
-      numThreadsY: 1
-      numThreadsZ: 1
-  materials:
-    swarmRenderMaterial: {fileID: 1205020977}
-    fragmentCountingMaterial: {fileID: 1949702393}
-    dynamicDepthBufferConstructionMaterial: {fileID: 133468346}
+  m_Name: Custom/InstancedSwarmRendering
+  m_Shader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
+--- !u!21 &423310467
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Custom/DynamicDepthBufferConstruction
+  m_Shader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Floats: []
+    m_Colors: []
 --- !u!1 &447996179
 GameObject:
   m_ObjectHideFlags: 0
@@ -562,9 +490,13 @@ MonoBehaviour:
   swarmType: 1
   foodLocationLuck: 0.5
   worldDodgeBias: 25
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  subMeshIndex: 0
-  particleTint: {r: 0.5638943, g: 0, b: 1, a: 1}
+  particleMeshes:
+  - {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  subMeshIndices: 0000000000000000
+  particleMaterials:
+  - {fileID: 2100000, guid: 90567a1145af26044b658668831d4d1f, type: 2}
+  - {fileID: 2100000, guid: 38cac5eaf3fcfba44888f372fd289f24, type: 2}
 --- !u!4 &447996181
 Transform:
   m_ObjectHideFlags: 0
@@ -871,8 +803,7 @@ Light:
   m_BounceIntensity: 1
   m_ColorTemperature: 6570
   m_UseColorTemperature: 0
-  m_BoundingSphereOverride: {x: 1.3563156e-19, y: 1.3563156e-19, z: 4.7260702e+22,
-    w: 1.10476574e-32}
+  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 4e-45}
   m_UseBoundingSphereOverride: 0
   m_ShadowRadius: 0
   m_ShadowAngle: 0
@@ -1013,7 +944,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScale: 0.1
-  simulationResources: {fileID: 263696351}
+  simulationResources: {fileID: 1891699361}
   updateEveryFrame: 0
   enableDistanceFieldGizmos: 0
   showInstancedDepthTexture: 0
@@ -1276,9 +1207,13 @@ MonoBehaviour:
   swarmType: 1
   foodLocationLuck: 0.5
   worldDodgeBias: 25
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  subMeshIndex: 0
-  particleTint: {r: 0.8590162, g: 1, b: 0, a: 1}
+  particleMeshes:
+  - {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  subMeshIndices: 0000000000000000
+  particleMaterials:
+  - {fileID: 2100000, guid: 8f3995dca19c45b4ca4fefee11ce06a6, type: 2}
+  - {fileID: 2100000, guid: 6c243d2a05853134e9595edaae1b1d59, type: 2}
 --- !u!4 &970753647
 Transform:
   m_ObjectHideFlags: 0
@@ -1389,15 +1324,15 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 977030377}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
---- !u!21 &1205020977
+--- !u!21 &1134846773
 Material:
   serializedVersion: 6
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/InstancedSwarmRendering
-  m_Shader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a, type: 3}
+  m_Name: Custom/FragmentCounting
+  m_Shader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad, type: 3}
   m_ShaderKeywords: 
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -1794,6 +1729,113 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1740328387}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1891699361
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c06aaec03025c554a9e16b5ec30b38a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shaders:
+    swarmSimulationComputeShader: {fileID: 7200000, guid: abee205e697b91c46b7d2bc0b860ef18,
+      type: 3}
+    swarmSimulationMaskedResetKernelData:
+      index: 0
+      name: MaskedReset
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmSimulationSlaveUpdateKernelData:
+      index: 1
+      name: SlaveUpdate
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmSimulationMasterUpdateKernelData:
+      index: 2
+      name: MasterUpdate
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    swarmRenderingShader: {fileID: 4800000, guid: c158016d3ce4ebd43b70004c897b459a,
+      type: 3}
+    fragmentCountingShader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad,
+      type: 3}
+    dynamicDepthBufferConstructionShader: {fileID: 4800000, guid: df865be9d3965b9419d320697f4e3a8c,
+      type: 3}
+    distanceFieldConstructionComputeShader: {fileID: 7200000, guid: 89f562db77bfa254fb83d6d1670f263e,
+      type: 3}
+    distanceToGradientFieldComputeShader: {fileID: 7200000, guid: 9ebb13dec865aac42bab2a96ec91b48b,
+      type: 3}
+    prefixSumComputeShader: {fileID: 7200000, guid: e55887909730bd74f9ddf3a52987997a,
+      type: 3}
+    clearBufferUintComputeShader: {fileID: 7200000, guid: e69288c5a5faef443b300c1dc66f682f,
+      type: 3}
+    bitonicMergeSortComputeShader: {fileID: 7200000, guid: e2fe08cb9f1d5724da6a61d49c68855f,
+      type: 3}
+    prefixSumScanInBucketInclusiveKernelData:
+      index: 0
+      name: ScanInBucketInclusive
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanInBucketExclusiveKernelData:
+      index: 1
+      name: ScanInBucketExclusive
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanBucketResultKernelData:
+      index: 2
+      name: ScanBucketResult
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    prefixSumScanAddBucketResultKernelData:
+      index: 3
+      name: ScanAddBucketResult
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    distanceFieldConstructionKernelData:
+      index: 0
+      name: CSMain
+      numThreadsX: 64
+      numThreadsY: 1
+      numThreadsZ: 1
+    distanceToGradientKernelData:
+      index: 0
+      name: CSMain
+      numThreadsX: 4
+      numThreadsY: 4
+      numThreadsZ: 4
+    clearBufferUintKernelData:
+      index: 0
+      name: Clear
+      numThreadsX: 128
+      numThreadsY: 1
+      numThreadsZ: 1
+    bitonicMergeSortInitKeysKernelData:
+      index: 1
+      name: InitKeys
+      numThreadsX: 256
+      numThreadsY: 1
+      numThreadsZ: 1
+    bitonicMergeSortBitonicSortKernelData:
+      index: 0
+      name: BitonicSort
+      numThreadsX: 256
+      numThreadsY: 1
+      numThreadsZ: 1
+  materials:
+    swarmRenderMaterial: {fileID: 235892007}
+    fragmentCountingMaterial: {fileID: 1134846773}
+    dynamicDepthBufferConstructionMaterial: {fileID: 423310467}
 --- !u!1 &1932528255
 GameObject:
   m_ObjectHideFlags: 0
@@ -1846,9 +1888,11 @@ MonoBehaviour:
   swarmType: 0
   foodLocationLuck: 0.5
   worldDodgeBias: 25
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  subMeshIndex: 0
-  particleTint: {r: 0, g: 1, b: 0, a: 1}
+  particleMeshes:
+  - {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  subMeshIndices: 00000000
+  particleMaterials:
+  - {fileID: 2100000, guid: 9ec226c87fa878d49868da741e80a881, type: 2}
 --- !u!4 &1932528257
 Transform:
   m_ObjectHideFlags: 0
@@ -1865,27 +1909,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!21 &1949702393
-Material:
-  serializedVersion: 6
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Custom/FragmentCounting
-  m_Shader: {fileID: 4800000, guid: 7e05932a01f3b7548bdc89381db6a7ad, type: 3}
-  m_ShaderKeywords: 
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs: []
-    m_Floats: []
-    m_Colors: []
 --- !u!1 &1956856664
 GameObject:
   m_ObjectHideFlags: 0
@@ -1938,9 +1961,11 @@ MonoBehaviour:
   swarmType: 0
   foodLocationLuck: 0.5
   worldDodgeBias: 25
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  subMeshIndex: 0
-  particleTint: {r: 0, g: 0.4468627, b: 1, a: 1}
+  particleMeshes:
+  - {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  subMeshIndices: 00000000
+  particleMaterials:
+  - {fileID: 2100000, guid: ba4af89d7c9883042ab8b9c6cb644d93, type: 2}
 --- !u!4 &1956856666
 Transform:
   m_ObjectHideFlags: 0
