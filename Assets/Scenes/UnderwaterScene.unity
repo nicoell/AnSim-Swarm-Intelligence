@@ -13950,9 +13950,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db5ec4bb7c9fba247b358dc81fbfb43c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.01
-  particleSightRadius: 0.1
-  separationWeight: 0.1
+  timeScale: 0.07
+  particleSightRadius: 0
+  separationWeight: 0
   simulationResources: {fileID: 941458723}
   updateEveryFrame: 0
   enableDistanceFieldGizmos: 0
@@ -32425,12 +32425,12 @@ MonoBehaviour:
   boundaryDisturbanceConstant: 0.2
   globalBestDisturbanceConstant: 0.05
   mutationStrategyParameter: 0.05
-  individualAccelerationConstant: 0.4
+  individualAccelerationConstant: 0.8
   socialAccelerationConstant: 0.8
   masterAccelerationConstant: 0.6
   inertiaWeightModifier: 0.99
   inertiaWeightMax: 1
-  inertiaWeightMin: 0.85
+  inertiaWeightMin: 0.88
   maxVelocity: 1
   asyncGpuRequestInterval: 0.2
   maxGpuRequestQueueLength: 2
@@ -33295,12 +33295,12 @@ MonoBehaviour:
   boundaryDisturbanceConstant: 0.2
   globalBestDisturbanceConstant: 0.05
   mutationStrategyParameter: 0.05
-  individualAccelerationConstant: 0.4
+  individualAccelerationConstant: 0.8
   socialAccelerationConstant: 0.8
   masterAccelerationConstant: 0.6
   inertiaWeightModifier: 0.99
   inertiaWeightMax: 1
-  inertiaWeightMin: 0.85
+  inertiaWeightMin: 0.88
   maxVelocity: 1
   asyncGpuRequestInterval: 0.2
   maxGpuRequestQueueLength: 2
