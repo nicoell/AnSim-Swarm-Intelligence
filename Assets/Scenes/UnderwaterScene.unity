@@ -13951,8 +13951,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScale: 0.07
-  particleSightRadius: 0
-  separationWeight: 0
+  particleSightRadius: 3.5
+  separationWeight: 0.35
   simulationResources: {fileID: 941458723}
   updateEveryFrame: 0
   enableDistanceFieldGizmos: 0
