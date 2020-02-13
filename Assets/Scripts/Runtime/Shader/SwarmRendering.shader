@@ -4,6 +4,8 @@
     _Tint("Tint", Color) = (1.0, 1.0, 1.0, 1.0)
     _NormalTex("Normal", 2D) = "white" {}
     _Scale("Scale", Vector) = (1.0, 1.0, 1.0)
+    [Toggle(FIX_ROTATION)] 
+    _FixRotation("FixRotation", Float) = 0
   }
   SubShader {
     Tags{"RenderType" = "Opaque"}
@@ -13,6 +15,8 @@
 #pragma vertex vert
 #pragma fragment frag
 #pragma target 4.5
+
+      #pragma shader_feature FIX_ROTATION
 
 #include "Definitions/Structs.hlsl"
 #include "UnityCG.cginc"
@@ -61,9 +65,21 @@
         SwarmParticleData particle = SwarmParticleBuffer[particleIndex];
 
         VertOut o;
+#ifdef FIX_ROTATION
+        o.pos = float4(_Scale * vertIn.vertex.xyz, 1);
+        float3x3 fixedRotation;
+        fixedRotation[0] = -particle.rotationMatrix[1];
+        fixedRotation[1] = -particle.rotationMatrix[0];
+        fixedRotation[2] = particle.rotationMatrix[2];
+        o.pos = float4(mul(fixedRotation, o.pos.xyz), 1);
+        o.pos = float4(o.pos.xyz + particle.position.xyz, 1);
+#else
         o.pos = float4(_Scale * vertIn.vertex.xyz, 1);
         o.pos = float4(mul(particle.rotationMatrix, o.pos.xyz), 1);
         o.pos = float4(o.pos.xyz + particle.position.xyz, 1);
+#endif
+
+        
         
         o.pos = mul(UNITY_MATRIX_VP, o.pos);
 
@@ -75,14 +91,14 @@
 
       float4 frag(VertOut vertOut) : SV_Target 
       {
-        float ambientLight = 0.0f;
-        float3 normal = tex2D(_NormalTex, vertOut.uv);
-        const float3 lightDir = -normalize(float3(0.2, 1.0, 0.2));
+        //float ambientLight = 0.0f;
+        //float3 normal = tex2D(_NormalTex, vertOut.uv);
+        //const float3 lightDir = -normalize(float3(0.2, 1.0, 0.2));
 
-        float diffuse = saturate(dot(-normal, lightDir));
+        //float diffuse = saturate(dot(-normal, lightDir));
         float3 col = tex2D(_MainTex, vertOut.uv) * vertOut.color.xyz;
 
-        col *= ambientLight + diffuse;
+        //col *= ambientLight + diffuse;
 
         return float4(col, 1.0);
       }

@@ -680,8 +680,8 @@ inline float3x3 GetRotationMatrixFromDirection(float3 normalizedDir)
   float3x3 ret =
   {
     temp,
+    -normalizedDir,
     cross(normalizedDir, temp),
-    normalizedDir
   };
   return transpose(ret);
 }
