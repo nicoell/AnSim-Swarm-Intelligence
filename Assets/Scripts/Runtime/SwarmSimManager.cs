@@ -14,9 +14,9 @@ namespace AnSim.Runtime
     [Range(0.01f, 2.00f)]
     public float timeScale = 0.1f;
     private float _timer = 0.0f;
-    [Range(0.1f, 20.0f)]
+    [Range(0.0f, 20.0f)]
     public float particleSightRadius = 10.0f;
-    [Range(0.01f, 1.0f)]
+    [Range(0.0f, 1.0f)]
     public float separationWeight = 0.6f;
 
     [Header("Resource Management")]
