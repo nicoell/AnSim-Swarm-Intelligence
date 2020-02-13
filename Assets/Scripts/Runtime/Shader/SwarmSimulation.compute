@@ -161,18 +161,49 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
   int3 gridPos = calcGridPos(classicParticle.position);
   uint gridAddress = calcGridAddress(gridPos);
   uint cellStartIndex = CellStartBuffer[gridAddress];
+  uint3 nIndices1;
+  nIndices1.x = CellStartBuffer[gridAddress - 3];
+  nIndices1.y = CellStartBuffer[gridAddress - 2];
+  nIndices1.z = CellStartBuffer[gridAddress - 1];
+  uint3 nIndices2;
+  nIndices2.x = CellStartBuffer[gridAddress + 3];
+  nIndices2.y = CellStartBuffer[gridAddress + 2];
+  nIndices2.z = CellStartBuffer[gridAddress + 1];
   
   float3 sep = float3(0, 0, 0);
   // get candidate list
-  for (int i = cellStartIndex; i <= cellStartIndex + 128; i++)
+  for (int i = 0; i <= 128; i++)
   {
-    ParticleHashData nParticle = ParticleHashBuffer[i]; // current neighbour particle
+    ParticleHashData nParticle = ParticleHashBuffer[cellStartIndex + i]; // current neighbour particle
+    ParticleHashData nParticle1 = ParticleHashBuffer[nIndices1.x + i];
+    ParticleHashData nParticle2 = ParticleHashBuffer[nIndices1.y + i];
+    ParticleHashData nParticle3 = ParticleHashBuffer[nIndices1.z + i];
+    ParticleHashData nParticle4 = ParticleHashBuffer[nIndices2.x + i];
+    ParticleHashData nParticle5 = ParticleHashBuffer[nIndices2.y + i];
+    ParticleHashData nParticle6 = ParticleHashBuffer[nIndices2.z + i];
     if (nParticle.cellId != gridAddress)
       break;
     float3 dist = classicParticle.position - nParticle.particlePos;
-    if (length(dist) > ParticleSightRadius)
-      continue;
-    sep -= dist;
+    float3 dist1 = classicParticle.position - nParticle1.particlePos;
+    float3 dist2 = classicParticle.position - nParticle2.particlePos;
+    float3 dist3 = classicParticle.position - nParticle3.particlePos;
+    float3 dist4 = classicParticle.position - nParticle4.particlePos;
+    float3 dist5 = classicParticle.position - nParticle5.particlePos;
+    float3 dist6 = classicParticle.position - nParticle6.particlePos;
+    if (length(dist) < ParticleSightRadius)
+      sep += dist;
+    if (length(dist1) < ParticleSightRadius)
+      sep += dist1;
+    if (length(dist2) < ParticleSightRadius)
+      sep += dist2;
+    if (length(dist3) < ParticleSightRadius)
+      sep += dist3;
+    if (length(dist4) < ParticleSightRadius)
+      sep += dist4;
+    if (length(dist5) < ParticleSightRadius)
+      sep += dist5;
+    if (length(dist6) < ParticleSightRadius)
+      sep += dist6;
   }
   
   //Update position with separation data
@@ -331,17 +362,49 @@ void Simulate(uint swarmBufferIndex, uint particleBufferIndex, uint groupIndex)
       uint gridAddress = calcGridAddress(gridPos);
       uint cellStartIndex = CellStartBuffer[gridAddress];
   
+      uint3 nIndices1;
+      nIndices1.x = CellStartBuffer[gridAddress - 3];
+      nIndices1.y = CellStartBuffer[gridAddress - 2];
+      nIndices1.z = CellStartBuffer[gridAddress - 1];
+      uint3 nIndices2;
+      nIndices2.x = CellStartBuffer[gridAddress + 3];
+      nIndices2.y = CellStartBuffer[gridAddress + 2];
+      nIndices2.z = CellStartBuffer[gridAddress + 1];
+  
       float3 sep = float3(0, 0, 0);
-      // get candidate list
-      for (int i = cellStartIndex; i <= cellStartIndex + 128; i++)
+  // get candidate list
+      for (int i = 0; i <= 128; i++)
       {
-        ParticleHashData nParticle = ParticleHashBuffer[i]; // current neighbour particle
+        ParticleHashData nParticle = ParticleHashBuffer[cellStartIndex + i]; // current neighbour particle
+        ParticleHashData nParticle1 = ParticleHashBuffer[nIndices1.x + i];
+        ParticleHashData nParticle2 = ParticleHashBuffer[nIndices1.y + i];
+        ParticleHashData nParticle3 = ParticleHashBuffer[nIndices1.z + i];
+        ParticleHashData nParticle4 = ParticleHashBuffer[nIndices2.x + i];
+        ParticleHashData nParticle5 = ParticleHashBuffer[nIndices2.y + i];
+        ParticleHashData nParticle6 = ParticleHashBuffer[nIndices2.z + i];
         if (nParticle.cellId != gridAddress)
           break;
         float3 dist = replica.position - nParticle.particlePos;
-        if (length(dist) > ParticleSightRadius)
-          continue;
-        sep -= dist;
+        float3 dist1 = replica.position - nParticle1.particlePos;
+        float3 dist2 = replica.position - nParticle2.particlePos;
+        float3 dist3 = replica.position - nParticle3.particlePos;
+        float3 dist4 = replica.position - nParticle4.particlePos;
+        float3 dist5 = replica.position - nParticle5.particlePos;
+        float3 dist6 = replica.position - nParticle6.particlePos;
+        if (length(dist) < ParticleSightRadius)
+          sep += dist;
+        if (length(dist1) < ParticleSightRadius)
+          sep += dist1;
+        if (length(dist2) < ParticleSightRadius)
+          sep += dist2;
+        if (length(dist3) < ParticleSightRadius)
+          sep += dist3;
+        if (length(dist4) < ParticleSightRadius)
+          sep += dist4;
+        if (length(dist5) < ParticleSightRadius)
+          sep += dist5;
+        if (length(dist6) < ParticleSightRadius)
+          sep += dist6;
       }
   
       //Update velocity with separation data
